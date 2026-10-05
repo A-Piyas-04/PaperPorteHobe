@@ -1,6 +1,8 @@
 """Investigation leads — sparse neighbourhoods near active areas."""
 from __future__ import annotations
 
+import html
+
 import streamlit as st
 
 import ui
@@ -8,34 +10,33 @@ import ui
 
 def render() -> None:
     bundle = ui.get_bundle()
-    leads = bundle.sparse_leads
+    leads, clusters = bundle.sparse_leads, bundle.clusters_meta
 
-    ui.section_title("Leads", "Investigation leads",
-                     "Low-density regions next to active areas, verified in high "
-                     "dimensions and across projections. Leads to look into — not "
-                     "proven gaps.")
+    ui.page_header("Leads", "Investigation leads",
+                   "Quiet spots right next to busy areas. Worth a look, not proven gaps.")
 
     if not leads:
-        st.markdown("<div class='sg-card'><div class='t'>No robust leads</div>"
-                    "<div class='s'>The current landscape produced no sparse "
-                    "neighbourhoods that survived the robustness checks.</div>"
-                    "</div>", unsafe_allow_html=True)
+        with ui.panel("no-leads"):
+            ui.panel_header("No robust leads")
+            st.markdown("The current landscape has no sparse spots that passed the checks.")
         return
 
     cols = st.columns(2, gap="medium")
     for i, ld in enumerate(leads, 1):
-        with cols[(i - 1) % 2]:
-            _lead_card(i, ld)
+        with cols[(i - 1) % 2], ui.panel(f"lead-{i}"):
+            _lead(i, ld, clusters)
 
 
-def _lead_card(i: int, ld: dict) -> None:
-    robustness = float(ld.get("robustness", 0))
-    pct = int(round(robustness * 100))
-    st.markdown(
-        f"<div class='sg-card'>"
-        f"<div class='t'>Lead {i} · near {ld.get('nearest_cluster_label') or 'unlabeled'}</div>"
-        f"<div class='m'>Robustness {pct}%</div>"
-        f"<div class='sg-meter'><span style='width:{pct}%'></span></div>"
-        f"</div>", unsafe_allow_html=True)
-    for e in ld.get("evidence_papers", [])[:3]:
-        ui.paper_card(e["title"], e["arxiv_id"], f"{e['primary_category']} · {e['date']}")
+def _lead(i: int, ld: dict, clusters: dict) -> None:
+    pct = int(round(float(ld.get("robustness", 0)) * 100))
+    near = ld.get("nearest_cluster_id")
+    near_name = (ui.area_name(clusters, near) if near is not None
+                 else ld.get("nearest_cluster_label") or "unlabeled")
+    ui.panel_header(f"Lead {i}", f"{pct}% robust")
+    st.markdown(f"<div class='sg-area-m'>Next to <b>{html.escape(near_name)}</b></div>"
+                f"<div class='sg-meter'><span style='width:{pct}%'></span></div>",
+                unsafe_allow_html=True)
+    st.markdown("<div style='height:.6rem'></div>", unsafe_allow_html=True)
+    for n, e in enumerate(ld.get("evidence_papers", [])[:3]):
+        ui.paper_card(e["title"], e["arxiv_id"], category=e["primary_category"],
+                      date=e["date"], delay=n)

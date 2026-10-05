@@ -85,6 +85,72 @@ def _representative_indices(embeddings: np.ndarray, idx: np.ndarray, n: int) -> 
 
 
 def _label_from_keywords(keywords: List[str]) -> str:
+    return pretty_label(keywords)
+
+
+_GENERIC = {
+    "based", "using", "model", "models", "learning", "data", "approach",
+    "method", "methods", "paper", "results", "propose", "proposed", "new",
+    "task", "tasks", "framework", "system", "systems", "study", "performance",
+}
+_ACRONYMS = {
+    "ai": "AI", "llm": "LLM", "llms": "LLMs", "gpu": "GPU", "gpus": "GPUs",
+    "kv": "KV", "moe": "MoE", "eeg": "EEG", "rl": "RL", "fl": "FL", "3d": "3D",
+    "2d": "2D", "gnn": "GNN", "gnns": "GNNs", "epr": "EPR", "nlp": "NLP",
+    "iot": "IoT", "api": "API", "ml": "ML", "vlm": "VLM", "vlms": "VLMs",
+    "vla": "VLA", "rag": "RAG", "cuda": "CUDA", "sql": "SQL", "qa": "QA",
+    "mri": "MRI", "ct": "CT", "asr": "ASR", "tts": "TTS", "hpc": "HPC",
+}
+
+
+def _stem(word: str) -> str:
+    if len(word) > 4 and word.endswith("ies"):
+        return word[:-3] + "y"
+    if len(word) > 3 and word.endswith("s") and not word.endswith("ss"):
+        return word[:-1]
+    return word
+
+
+def _title(term: str) -> str:
+    return " ".join(_ACRONYMS.get(w, w.capitalize()) for w in term.split())
+
+
+def pretty_label(keywords: List[str], max_terms: int = 3) -> str:
+    """Human-readable cluster name from ranked c-TF-IDF keywords.
+
+    Drops near-duplicates (agent/agents), lets a bigram replace the unigrams
+    it contains (kv + cache -> KV Cache), skips generic words when possible,
+    and title-cases the result: ``"Software, Agents & Code"``.
+    """
     if not keywords:
-        return "unlabeled cluster"
-    return ", ".join(keywords[:3])
+        return "Unlabeled area"
+
+    def pick(skip_generic: bool) -> List[str]:
+        chosen: List[tuple] = []
+        for kw in keywords:
+            kw = str(kw).strip().lower()
+            words = kw.split()
+            if not words or (skip_generic and all(w in _GENERIC for w in words)):
+                continue
+            stems = {_stem(w) for w in words}
+            if len(words) > 1:
+                chosen = [c for c in chosen if not c[1] <= stems]
+            covered = set().union(*[c[1] for c in chosen]) if chosen else set()
+            if stems <= covered:
+                continue
+            if len(words) == 1 and any(
+                    len(c) >= 4 and (words[0].startswith(c) or c.startswith(words[0]))
+                    for c in covered):
+                continue
+            chosen.append((kw, stems))
+            if len(chosen) >= max_terms:
+                break
+        return [c[0] for c in chosen]
+
+    terms = pick(skip_generic=True)
+    if len(terms) < 2:
+        terms = pick(skip_generic=False)
+    terms = [_title(t) for t in terms]
+    if len(terms) == 1:
+        return terms[0]
+    return ", ".join(terms[:-1]) + " & " + terms[-1]

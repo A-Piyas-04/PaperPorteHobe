@@ -8,27 +8,23 @@ from scholargrid.config import load_config
 
 
 def render() -> None:
-    _, mid, _ = st.columns([1, 2, 1])
+    _, mid, _ = st.columns([1, 2.2, 1])
     with mid:
-        st.markdown("<div style='height:2rem'></div>", unsafe_allow_html=True)
-        st.markdown("<div class='sg-eyebrow'>Welcome</div>", unsafe_allow_html=True)
-        st.markdown("# 🔭 ScholarGrid")
-        st.markdown("<p class='sg-lead'>There's no research landscape yet. "
-                    "Build one to get started.</p>", unsafe_allow_html=True)
+        st.markdown("<div style='height:2.5rem'></div>", unsafe_allow_html=True)
+        ui.page_header("Welcome", "🔭 ScholarGrid",
+                       "There's no research landscape yet. Build one to get started.")
 
-        st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
-        st.markdown("<div class='sg-card'><div class='t'>Try it now</div>"
-                    "<div class='s'>Build a small offline demo landscape in a "
-                    "few seconds — no internet needed.</div></div>",
-                    unsafe_allow_html=True)
-        if st.button("Load demo data", type="primary", use_container_width=True):
-            _build_demo()
+        with ui.panel("demo"):
+            ui.panel_header("Try it now", "a few seconds")
+            st.markdown("Build a small demo landscape offline. No internet needed.")
+            if st.button("Load demo data", type="primary", use_container_width=True):
+                _build_demo()
 
-        st.markdown("<div class='sg-card'><div class='t'>Use real arXiv data</div>"
-                    "<div class='s'>Harvest recent arXiv CS papers, then reload "
-                    "this page.</div></div>", unsafe_allow_html=True)
-        st.code("python pipeline/run_pipeline.py", language="bash")
-        st.caption("Configure the window and sources in configs/config.yaml.")
+        with ui.panel("real"):
+            ui.panel_header("Use real arXiv data")
+            st.markdown("Harvest recent arXiv papers, then reload this page.")
+            st.code("python pipeline/run_pipeline.py", language="bash")
+            st.caption("Settings live in configs/config.yaml.")
 
 
 def _build_demo() -> None:
@@ -40,5 +36,4 @@ def _build_demo() -> None:
     bar = st.progress(0.0, "Starting…")
     run(demo, progress=lambda f, m: bar.progress(min(f, 1.0), m))
     st.cache_resource.clear()
-    st.success("Demo landscape ready.")
     st.rerun()

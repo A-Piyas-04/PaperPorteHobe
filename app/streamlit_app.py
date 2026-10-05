@@ -56,6 +56,8 @@ def main() -> None:
         onboarding.render()
         return
 
+    ui.ensure_loaded()
+
     pages = _build_pages()
     st.session_state["_pages"] = pages
 

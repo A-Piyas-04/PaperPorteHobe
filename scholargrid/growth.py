@@ -44,6 +44,10 @@ def compute_growth(df: pd.DataFrame, labels: np.ndarray, cfg: Config,
 
     all_dates = df["date"]
     corpus_raw = {w: _raw_growth(*_window_counts(all_dates, ref, w)) for w in windows}
+    # A window comparison is only meaningful when the corpus covers both the
+    # recent and the previous period.
+    history_days = int((all_dates.max() - all_dates.min()).days) + 1 if len(all_dates) else 0
+    sufficient = {w: history_days >= 2 * w * 30.4 for w in windows}
 
     cluster_ids = sorted({int(c) for c in labels if c != -1})
     clusters: Dict[int, Dict] = {}
@@ -58,6 +62,7 @@ def compute_growth(df: pd.DataFrame, labels: np.ndarray, cfg: Config,
                 "previous_count": previous,
                 "raw_growth": round(raw, 4),
                 "relative_growth": round(raw / corpus_raw[w], 4),
+                "sufficient": bool(sufficient[w]),
             }
         rel_values = [per_window[str(w)]["relative_growth"] for w in windows]
         clusters[cid] = {
@@ -74,6 +79,8 @@ def compute_growth(df: pd.DataFrame, labels: np.ndarray, cfg: Config,
         "windows_months": windows,
         "default_window": gcfg["default_window"],
         "corpus_raw_growth": {str(w): round(v, 4) for w, v in corpus_raw.items()},
+        "history_days": history_days,
+        "sufficient_history": bool(sufficient.get(gcfg["default_window"], False)),
         "clusters": clusters,
     }
 
