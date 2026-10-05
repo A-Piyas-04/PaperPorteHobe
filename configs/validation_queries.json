@@ -1,0 +1,21 @@
+{
+  "description": "Known-item benchmark for semantic-search validation (FR-16). Each query lists expected arXiv categories and keywords used to compute an approximate precision@k / relevance rate.",
+  "queries": [
+    {"query": "large language models for reasoning", "expect_categories": ["cs.CL", "cs.LG", "cs.AI"], "expect_keywords": ["language", "model", "llm", "reasoning", "transformer"]},
+    {"query": "diffusion models for image generation", "expect_categories": ["cs.CV", "cs.LG"], "expect_keywords": ["diffusion", "image", "generation", "generative"]},
+    {"query": "graph neural networks", "expect_categories": ["cs.LG", "cs.AI"], "expect_keywords": ["graph", "neural", "gnn", "node"]},
+    {"query": "adversarial attacks on deep learning", "expect_categories": ["cs.CR", "cs.LG", "cs.CV"], "expect_keywords": ["adversarial", "attack", "robust", "perturbation"]},
+    {"query": "reinforcement learning for robotics", "expect_categories": ["cs.RO", "cs.LG", "cs.AI"], "expect_keywords": ["reinforcement", "robot", "policy", "control"]},
+    {"query": "self-supervised representation learning", "expect_categories": ["cs.LG", "cs.CV", "cs.CL"], "expect_keywords": ["self-supervised", "representation", "contrastive", "pretraining"]},
+    {"query": "federated learning privacy", "expect_categories": ["cs.LG", "cs.CR", "cs.DC"], "expect_keywords": ["federated", "privacy", "distributed", "differential"]},
+    {"query": "neural machine translation", "expect_categories": ["cs.CL", "cs.LG"], "expect_keywords": ["translation", "machine", "sequence", "attention"]},
+    {"query": "object detection in images", "expect_categories": ["cs.CV"], "expect_keywords": ["object", "detection", "bounding", "segmentation"]},
+    {"query": "transformer architecture efficiency", "expect_categories": ["cs.LG", "cs.CL"], "expect_keywords": ["transformer", "attention", "efficient", "sparse"]},
+    {"query": "knowledge graph embedding", "expect_categories": ["cs.AI", "cs.CL", "cs.LG"], "expect_keywords": ["knowledge", "graph", "embedding", "entity"]},
+    {"query": "speech recognition deep learning", "expect_categories": ["cs.CL", "cs.LG", "eess.AS"], "expect_keywords": ["speech", "recognition", "audio", "acoustic"]},
+    {"query": "software vulnerability detection", "expect_categories": ["cs.CR", "cs.SE"], "expect_keywords": ["vulnerability", "security", "code", "detection"]},
+    {"query": "distributed systems consensus", "expect_categories": ["cs.DC"], "expect_keywords": ["distributed", "consensus", "fault", "protocol"]},
+    {"query": "prompt engineering for language models", "expect_categories": ["cs.CL", "cs.AI"], "expect_keywords": ["prompt", "language", "model", "few-shot"]},
+    {"query": "explainable artificial intelligence", "expect_categories": ["cs.AI", "cs.LG"], "expect_keywords": ["explainable", "interpretability", "explanation", "xai"]}
+  ]
+}

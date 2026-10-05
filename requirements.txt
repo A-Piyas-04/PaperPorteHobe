@@ -1,0 +1,22 @@
+# ScholarGrid — Research Landscape Explorer
+# Core (required). Versions pinned for reproducibility (NFR-03).
+numpy==2.3.1
+pandas==2.3.1
+scikit-learn==1.7.1
+scipy==1.16.1
+plotly==6.1.2
+streamlit==1.46.1
+pyyaml==6.0.2
+requests==2.32.4
+
+# Preferred analytical backends (optional).
+# The pipeline uses these automatically when importable, and falls back to
+# scikit-learn equivalents otherwise. Install for the SRS baseline methods
+# (FR-02 all-MiniLM-L6-v2, FR-03 UMAP + HDBSCAN).
+#   pip install sentence-transformers umap-learn hdbscan
+# sentence-transformers>=3.0
+# umap-learn>=0.5
+# hdbscan>=0.8
+
+# Optional: citation missing-link analysis (FR-09, stretch).
+# pyalex>=0.15

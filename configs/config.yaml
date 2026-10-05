@@ -1,0 +1,123 @@
+# ScholarGrid — Research Landscape Explorer
+# Central configuration for the offline analytical pipeline (NFR-03 reproducibility).
+# Every stage reads from this file; all parameters and seeds live here.
+
+pipeline_version: "1.0.0"
+seed: 42
+
+paths:
+  raw_dir: data/raw
+  processed_dir: data/processed
+  reports_dir: reports
+
+# ---------------------------------------------------------------------------
+# FR-01  Research dataset ingestion
+# ---------------------------------------------------------------------------
+data:
+  # source: "arxiv_api" (live harvest), "kaggle" (local snapshot json), or "synthetic"
+  # (offline, deterministic demo corpus). If a network source fails, the pipeline
+  # falls back to "synthetic" so the run always completes.
+  source: arxiv_api
+  categories_prefix: "cs."        # retain cs.* papers only
+  # Documented recent time window (inclusive). Papers outside are dropped.
+  date_start: "2023-01-01"
+  date_end: "2026-10-05"
+  max_papers: 1500                # corpus cap for a lightweight MVP
+  use_cache: true                 # cache the raw harvest under data/raw (reproducible, kinder to arXiv)
+  min_abstract_chars: 200         # drop empty / very short abstracts
+  # Topic queries used to harvest a spread across CS (arxiv_api source).
+  arxiv_queries:
+    - "cat:cs.LG"
+    - "cat:cs.CL"
+    - "cat:cs.CV"
+    - "cat:cs.CR"
+    - "cat:cs.RO"
+    - "cat:cs.AI"
+    - "cat:cs.DC"
+    - "cat:cs.SE"
+  kaggle_json: data/raw/arxiv-metadata-oai-snapshot.json
+
+# ---------------------------------------------------------------------------
+# FR-02  Paper embeddings
+# ---------------------------------------------------------------------------
+embedding:
+  # backend: "auto" prefers sentence-transformers (all-MiniLM-L6-v2) when
+  # importable, otherwise uses the reproducible "tfidf" backend
+  # (TfidfVectorizer -> TruncatedSVD -> L2 normalise). Force with "minilm"/"tfidf".
+  backend: auto
+  model_name: "all-MiniLM-L6-v2"
+  tfidf_dims: 256
+  tfidf_max_features: 20000
+  batch_size: 64
+
+# ---------------------------------------------------------------------------
+# FR-03  Clustering (analytical dimensionality reduction + density clustering)
+# ---------------------------------------------------------------------------
+reduce:
+  # Analytical reduction to ~5-10 dims. backend: "auto" prefers UMAP, else PCA.
+  backend: auto
+  n_components: 8
+  umap_n_neighbors: 15
+  umap_min_dist: 0.0
+
+cluster:
+  # backend: "auto" prefers HDBSCAN, else density clustering (DBSCAN). If the
+  # density fallback underperforms on embeddings that lack sharp density valleys
+  # (typical for the TF-IDF fallback), a silhouette-selected KMeans is used
+  # instead, with far-from-centroid points kept as noise (-1).
+  backend: auto
+  min_cluster_size: 15
+  min_samples: 5
+  fallback_min_clusters: 4      # engage KMeans fallback if DBSCAN yields fewer
+  kmeans_k_range: [5, 14]       # k search range for the KMeans fallback
+  noise_percentile: 98          # points beyond this centroid-distance pctile -> noise
+
+# ---------------------------------------------------------------------------
+# FR-04  Cluster labels (c-TF-IDF keywords + representative papers)
+# ---------------------------------------------------------------------------
+labeling:
+  top_keywords: 8
+  n_representative: 5
+
+# ---------------------------------------------------------------------------
+# FR-05  2D landscape (separate 2D projection for visualisation only)
+# ---------------------------------------------------------------------------
+landscape:
+  backend: auto          # UMAP(2) when available, else PCA(2)
+  umap_n_neighbors: 15
+  umap_min_dist: 0.1
+
+# ---------------------------------------------------------------------------
+# FR-07  Publication-growth analysis
+# ---------------------------------------------------------------------------
+growth:
+  # reference_date: "auto" uses the latest included paper date.
+  reference_date: auto
+  windows_months: [3, 6, 12]
+  default_window: 6
+
+# ---------------------------------------------------------------------------
+# FR-06  Semantic search
+# ---------------------------------------------------------------------------
+search:
+  top_k: 25
+
+# ---------------------------------------------------------------------------
+# FR-08  Sparse-neighborhood exploration
+# ---------------------------------------------------------------------------
+sparse:
+  grid_size: 24                 # 2D density grid resolution
+  low_density_percentile: 20    # cells below this density are candidates
+  min_neighbor_density: 1       # candidate must border a populated (cluster) cell
+  hd_neighbors: 15              # neighbours checked in high-dim space
+  robustness_seeds: [0, 1, 2]   # re-project under several seeds
+  min_robustness: 0.5           # fraction of seeds a lead must survive
+  max_leads: 12
+
+# ---------------------------------------------------------------------------
+# FR-16 / FR-17 / FR-18  Validation
+# ---------------------------------------------------------------------------
+validation:
+  queries_file: configs/validation_queries.json
+  search_top_k: 10
+  alternate_cutoffs: ["2025-06-30", "2025-03-31"]
