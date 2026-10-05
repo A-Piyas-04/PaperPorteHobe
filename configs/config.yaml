@@ -68,7 +68,10 @@ cluster:
   backend: auto
   min_cluster_size: 15
   min_samples: 5
-  fallback_min_clusters: 4      # engage KMeans fallback if DBSCAN yields fewer
+  # HDBSCAN cluster selection: "leaf" extracts finer-grained clusters (preferred
+  # for a landscape view); "eom" takes the few most-persistent clusters.
+  hdbscan_cluster_selection_method: leaf
+  fallback_min_clusters: 4      # engage KMeans fallback if the chosen backend yields fewer
   kmeans_k_range: [5, 14]       # k search range for the KMeans fallback
   noise_percentile: 98          # points beyond this centroid-distance pctile -> noise
 

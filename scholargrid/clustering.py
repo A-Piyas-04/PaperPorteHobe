@@ -17,19 +17,24 @@ log = get_logger("cluster")
 
 def cluster(reduced: np.ndarray, cfg: Config) -> tuple[np.ndarray, str]:
     backend = cfg.resolve_cluster_backend()
+    min_clusters = int(cfg["cluster"].get("fallback_min_clusters", 4))
     if backend == "hdbscan":
         labels = _hdbscan(reduced, cfg)
     else:
         labels = _dbscan(reduced, cfg)
-        n = len({int(c) for c in labels if c != -1})
-        if n < int(cfg["cluster"].get("fallback_min_clusters", 4)):
-            log.info("Density clustering yielded %d clusters; using KMeans fallback.", n)
-            labels = _kmeans(reduced, cfg)
-            backend = "kmeans"
-    n_clusters = len({int(c) for c in labels if c != -1})
-    n_noise = int((labels == -1).sum())
+    n = len({int(c) for c in labels if c != -1})
     log.info("%s produced %d clusters, %d noise points (%.1f%%).",
-             backend, n_clusters, n_noise, 100.0 * n_noise / max(1, len(labels)))
+             backend, n, int((labels == -1).sum()),
+             100.0 * int((labels == -1).sum()) / max(1, len(labels)))
+    if n < min_clusters:
+        log.info("%s yielded %d clusters (<%d); using KMeans fallback.",
+                 backend, n, min_clusters)
+        labels = _kmeans(reduced, cfg)
+        backend = "kmeans"
+        n = len({int(c) for c in labels if c != -1})
+        log.info("%s produced %d clusters, %d noise points (%.1f%%).",
+                 backend, n, int((labels == -1).sum()),
+                 100.0 * int((labels == -1).sum()) / max(1, len(labels)))
     return labels.astype(int), backend
 
 
@@ -65,10 +70,12 @@ def _kmeans(reduced: np.ndarray, cfg: Config) -> np.ndarray:
 def _hdbscan(reduced: np.ndarray, cfg: Config) -> np.ndarray:
     import hdbscan  # type: ignore
 
+    method = str(cfg["cluster"].get("hdbscan_cluster_selection_method", "leaf"))
     clusterer = hdbscan.HDBSCAN(
         min_cluster_size=int(cfg["cluster"]["min_cluster_size"]),
         min_samples=int(cfg["cluster"]["min_samples"]),
         metric="euclidean",
+        cluster_selection_method=method,
     )
     return clusterer.fit_predict(reduced)
 

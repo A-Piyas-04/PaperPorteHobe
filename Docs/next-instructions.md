@@ -13,61 +13,81 @@ edit). Most people need only Steps 1–4.
 | Item | State |
 |---|---|
 | Python | 3.12.2 via the `py` launcher (`python3` does **not** work on Windows) |
-| `.venv` | created, but **no packages installed yet** |
-| Real arXiv data | already built in `data/processed/` (1,275 papers, 9 clusters, 12 leads) using the **fallback** backends (TF-IDF · PCA · KMeans) |
-| Validation report | `reports/validation_report.md` exists |
-| GitHub | repo pushed to `origin` → <https://github.com/A-Piyas-04/PaperPorteHobe> |
+| `.venv` | ✅ created and populated (core stack + MiniLM / UMAP / HDBSCAN) |
+| Real arXiv data | ✅ built in `data/processed/` — 1,275 papers · 26 clusters · 12 leads · precision@k = 0.88 · using the SRS baseline backends (MiniLM · UMAP · HDBSCAN) |
+| Validation report | ✅ `reports/validation_report.md` up to date |
+| GitHub | ✅ repo pushed to `origin` → <https://github.com/A-Piyas-04/PaperPorteHobe> |
 | Git LFS | installed (needed only for Step 5, Track B) |
+
+> **➡️ Where to pick up now: [Step 4](#step-4----️-run-the-web-app-locally).**
+> Steps 1–3 are already done. Steps 5–7 are deployment and refresh — do them
+> only if/when you need them.
 
 ---
 
 ## Step 1 — 🖥️ Activate the environment and install (once)
 
-The venv already exists, so just activate it and install:
+> ✅ **Done.** The venv is already set up and populated. Just reactivate it in
+> every new terminal:
+>
+> ```powershell
+> cd "E:\Projects\My Apps\PaperPorteHobe"
+> .\.venv\Scripts\Activate.ps1
+> ```
+>
+> Your prompt should start with `(.venv)`. Inside the venv, use `python`
+> (not `python3`, not `py`).
+
+<details>
+<summary>If you ever need to recreate it from scratch</summary>
 
 ```powershell
-cd "E:\Projects\My Apps\PaperPorteHobe"
+Remove-Item -Recurse -Force .venv
+py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-Your prompt should now start with `(.venv)`. Inside the venv, use `python`
-(not `python3`, not `py`).
+- `source .venv/bin/activate` is the Linux/macOS command — it fails in
+  PowerShell. Use `.\.venv\Scripts\Activate.ps1`.
+- If PowerShell says *"running scripts is disabled on this system"*, run once:
+  `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, then activate again.
 
-> **Notes**
-> - `source .venv/bin/activate` is the Linux/macOS command — it fails in
->   PowerShell. Use `.\.venv\Scripts\Activate.ps1`.
-> - If PowerShell says *"running scripts is disabled on this system"*, run once:
->   `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, then activate again.
-> - Re-activate the venv every time you open a new terminal.
-> - If you ever need to recreate it: `Remove-Item -Recurse -Force .venv` then
->   `py -3.12 -m venv .venv`.
+</details>
 
 ---
 
 ## Step 2 — 🖥️ (Recommended, optional) Install the baseline ML methods
 
-These give sharper clusters and better search (SRS baseline: MiniLM embeddings,
-UMAP, HDBSCAN). The pipeline auto-detects them — no code change needed. Your
-Python 3.12 is supported.
+> ✅ **Done.** `sentence-transformers`, `umap-learn`, and `hdbscan` are already
+> installed, and the pipeline is actively using all three (see `meta.json` →
+> `backends`).
+
+<details>
+<summary>If you ever need to reinstall</summary>
 
 ```powershell
 pip install sentence-transformers umap-learn hdbscan
 ```
 
-> This pulls in PyTorch (~a few hundred MB). The first pipeline run also
-> downloads the `all-MiniLM-L6-v2` model (~90 MB) once.
+This pulls in PyTorch (~a few hundred MB). The first pipeline run also
+downloads the `all-MiniLM-L6-v2` model (~90 MB) once.
 
-Skip this and ScholarGrid still works using the built-in fallbacks (which is
-what your current data was built with).
+Skip this and ScholarGrid still works using the built-in fallbacks (TF-IDF,
+PCA, DBSCAN/KMeans).
+
+</details>
 
 ---
 
 ## Step 3 — 🖥️ Build (or rebuild) the data
 
-You **already have** a real-arXiv landscape, so this step is optional. Run it if
-you did Step 2 (to rebuild with the better methods) or changed the config:
+> ✅ **Done.** The current bundle in `data/processed/` is the SRS-baseline
+> build (MiniLM + UMAP + HDBSCAN) with **1,275 papers, 26 clusters, 12
+> investigation leads, precision@k = 0.88, silhouette = 0.51**.
+
+Re-run only if you change `configs/config.yaml` or want fresher papers:
 
 ```powershell
 python pipeline\run_pipeline.py
@@ -75,21 +95,29 @@ python pipeline\run_pipeline.py
 
 - The raw harvest is cached in `data\raw\arxiv_harvest.csv`, so re-running
   **reuses the same papers** and only redoes the analysis (no network).
+- Runtime: ~3 minutes on this machine.
 - When it finishes you'll see `papers=… clusters=… leads=… precision@k=…` and
   an updated [`reports/validation_report.md`](../reports/validation_report.md).
 - Check which methods were actually used in `data\processed\meta.json` →
-  `"backends"` (e.g. `"embedding": "minilm"` instead of `"tfidf"`).
+  `"backends"`.
 
 📝 To change the corpus, edit [`configs/config.yaml`](../configs/config.yaml):
 `data.date_end`, `data.max_papers`, `data.arxiv_queries` — then force a fresh
 harvest (see Step 7).
 
 > **Know this about the current corpus:** the arXiv harvest takes the *newest*
-> papers per category, so 1,500 papers only spans about one week
+> papers per category, so 1,275 papers only spans about one week
 > (2026-09-25 → 2026-10-02). Clusters and search are fine, but the **growth**
 > numbers (3/6/12-month windows) need a longer span. For meaningful trends,
 > raise `data.max_papers` substantially (e.g. `8000`, slower harvest) or use the
 > Kaggle snapshot (`data.source: kaggle`, see README).
+
+> **Clustering tuning (`configs/config.yaml → cluster`).** HDBSCAN's
+> `hdbscan_cluster_selection_method: leaf` (the default) extracts fine-grained
+> topic clusters — fits a landscape view. Switch to `eom` if you want fewer,
+> larger clusters. If HDBSCAN or DBSCAN ever yields fewer than
+> `fallback_min_clusters`, the pipeline automatically falls back to a
+> silhouette-selected KMeans.
 
 **Offline alternative:** with no data at all, the app's first screen offers a
 **"Load demo data"** button that builds a small synthetic landscape in seconds.
@@ -97,7 +125,7 @@ harvest (see Step 7).
 
 ---
 
-## Step 4 — 🖥️ Run the web app locally
+## Step 4 — 🖥️ Run the web app locally ← **start here**
 
 ```powershell
 streamlit run app\streamlit_app.py
