@@ -8,6 +8,15 @@ font = "sans serif"
 
 [server]
 headless = true
+# Disable the source-file watcher. It otherwise walks every imported module
+# (incl. transformers' lazy image-processing modules), which floods the console
+# with harmless `No module named 'torchvision'` tracebacks. We don't need
+# hot-reload for this app; restart manually after editing code.
+fileWatcherType = "none"
+
+[logger]
+# Quieten the watcher's import-path probing warnings.
+level = "error"
 
 [browser]
 gatherUsageStats = false
