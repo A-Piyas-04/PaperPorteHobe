@@ -11,31 +11,56 @@ artifact formats, the web app, and how all of it maps back to the SRS
 
 ## 1. Design in one picture
 
-```
-                         OFFLINE  (pipeline/run_pipeline.py → scholargrid.runner.run)
- ┌──────────────────────────────────────────────────────────────────────────────┐
- │ arXiv API / Kaggle / synthetic                                                 │
- │        │ FR-01 clean: cs.* · window · dedup · drop short abstracts             │
- │        ▼                                                                        │
- │   title+abstract ──embed(FR-02)──► embeddings.npy                              │
- │        │                                   │                                    │
- │        │                     reduce 8-D (FR-03) ──cluster(FR-03)──► labels      │
- │        │                                   │                │                   │
- │        │                           label (FR-04)      project 2-D (FR-05)       │
- │        │                                   │                │                   │
- │        ▼                                   ▼                ▼                   │
- │   growth (FR-07)  ·  sparse leads (FR-08)  ·  validation (FR-15..18)            │
- │        └────────────────────────────┬──────────────────────┘                   │
- │                                      ▼                                           │
- │                 data/processed/ (bundle)   +   reports/ (validation)            │
- └──────────────────────────────────────────────────────────────────────────────┘
-                                      │  loads precomputed artifacts only
-                                      ▼
-                   ONLINE  (app/streamlit_app.py)  — live query embedding +
-                   nearest-neighbour retrieval; everything else is read back.
+ScholarGrid is split into a heavy **offline pipeline** that precomputes
+everything, and a light **online app** that only reads the results back
+(NFR-01).
+
+```mermaid
+flowchart TB
+    subgraph OFFLINE["OFFLINE · pipeline/run_pipeline.py → scholargrid.runner.run"]
+        direction TB
+        SRC[("arXiv API · Kaggle · synthetic")]
+        CLEAN["<b>Clean corpus</b> · FR-01<br/>cs.* only · date window · dedup · drop short abstracts"]
+        EMB["<b>Embed</b> title + abstract · FR-02<br/><i>embeddings.npy</i>"]
+        RED["<b>Reduce</b> to 8-D · FR-03"]
+        CLU["<b>Cluster</b> · FR-03<br/><i>labels</i>"]
+        LAB["<b>Label topics</b> · FR-04"]
+        PROJ["<b>Project</b> to 2-D · FR-05"]
+        GRO["<b>Growth</b> · FR-07"]
+        SPA["<b>Sparse leads</b> · FR-08"]
+        VAL["<b>Validation</b> · FR-15–18"]
+        BUNDLE[/"data/processed/ — artifact bundle"/]
+        REPORT[/"reports/ — validation report"/]
+
+        SRC --> CLEAN --> EMB --> RED --> CLU
+        EMB --> PROJ
+        CLU --> LAB
+        CLU --> GRO
+        LAB & PROJ --> SPA
+        LAB & GRO & SPA & PROJ --> BUNDLE
+        LAB & SPA --> VAL --> REPORT
+    end
+
+    subgraph ONLINE["ONLINE · app/streamlit_app.py"]
+        direction TB
+        APP["<b>Live:</b> query embedding + nearest-neighbour retrieval<br/><b>Read back:</b> everything else"]
+    end
+
+    BUNDLE -- "loads precomputed artifacts only" --> APP
 ```
 
-The expensive work is **offline**; the deployed app is light (NFR-01).
+| Stage | Where it runs | Requirement | Output |
+|---|---|---|---|
+| Ingest & clean | offline | FR-01 | cleaned corpus |
+| Embed | offline | FR-02 | `embeddings.npy` |
+| Reduce (8-D) → cluster | offline | FR-03 | cluster labels |
+| Topic labelling | offline | FR-04 | keywords + representative papers |
+| 2-D projection (from embeddings) | offline | FR-05 | map coordinates |
+| Growth / sparse leads | offline | FR-07 / FR-08 | trend + gap tables |
+| Validation | offline | FR-15–18 | `reports/` (`.md` + `.json`) |
+| Search & browse | **online** | — | live query embedding + nearest-neighbour lookup |
+
+The expensive work is all **offline**, so the deployed app stays light (NFR-01).
 
 ---
 
