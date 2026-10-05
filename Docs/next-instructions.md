@@ -1,72 +1,110 @@
 # Next Instructions — getting ScholarGrid fully running
 
-My part (the code, pipeline, and web app) is done and tested. Below is exactly
-what **you** do next, in order, and **where** each step happens
-(🖥️ terminal · 🌐 website · 📝 file edit). Most people need only Steps 1–4.
+The code, pipeline, and web app are done. Below is exactly what to do next, in
+order, and **where** each step happens (🖥️ terminal · 🌐 website · 📝 file
+edit). Most people need only Steps 1–4.
 
-> **Project root:** everything runs from `/home/amt/snap/RFE`.
+> **Project root:** `E:\Projects\My Apps\PaperPorteHobe`
+> **Shell:** Windows PowerShell (Cursor's default terminal). All commands below
+> are PowerShell and are run from the project root.
+
+### Where the project stands right now
+
+| Item | State |
+|---|---|
+| Python | 3.12.2 via the `py` launcher (`python3` does **not** work on Windows) |
+| `.venv` | created, but **no packages installed yet** |
+| Real arXiv data | already built in `data/processed/` (1,275 papers, 9 clusters, 12 leads) using the **fallback** backends (TF-IDF · PCA · KMeans) |
+| Validation report | `reports/validation_report.md` exists |
+| GitHub | repo pushed to `origin` → <https://github.com/A-Piyas-04/PaperPorteHobe> |
+| Git LFS | installed (needed only for Step 5, Track B) |
 
 ---
 
-## Step 1 — 🖥️ Create the environment and install (once)
+## Step 1 — 🖥️ Activate the environment and install (once)
 
-```bash
-cd /home/amt/snap/RFE
-python3 -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install --upgrade pip
+The venv already exists, so just activate it and install:
+
+```powershell
+cd "E:\Projects\My Apps\PaperPorteHobe"
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-> **Python version note.** This installs the core stack (works on any recent
-> Python). The *optional* higher-quality backends in Step 2 need **Python 3.11
-> or 3.12** — they don't yet have wheels for Python 3.14. Check with
-> `python3 --version`. If you're on 3.14 and want the better methods, install
-> 3.12 and recreate the venv with `python3.12 -m venv .venv`.
+Your prompt should now start with `(.venv)`. Inside the venv, use `python`
+(not `python3`, not `py`).
+
+> **Notes**
+> - `source .venv/bin/activate` is the Linux/macOS command — it fails in
+>   PowerShell. Use `.\.venv\Scripts\Activate.ps1`.
+> - If PowerShell says *"running scripts is disabled on this system"*, run once:
+>   `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, then activate again.
+> - Re-activate the venv every time you open a new terminal.
+> - If you ever need to recreate it: `Remove-Item -Recurse -Force .venv` then
+>   `py -3.12 -m venv .venv`.
 
 ---
 
 ## Step 2 — 🖥️ (Recommended, optional) Install the baseline ML methods
 
-These give sharper clusters and better search. The app auto-detects them — no
-code change needed.
+These give sharper clusters and better search (SRS baseline: MiniLM embeddings,
+UMAP, HDBSCAN). The pipeline auto-detects them — no code change needed. Your
+Python 3.12 is supported.
 
-```bash
+```powershell
 pip install sentence-transformers umap-learn hdbscan
 ```
 
-Skip this and ScholarGrid still works using the built-in fallbacks.
+> This pulls in PyTorch (~a few hundred MB). The first pipeline run also
+> downloads the `all-MiniLM-L6-v2` model (~90 MB) once.
+
+Skip this and ScholarGrid still works using the built-in fallbacks (which is
+what your current data was built with).
 
 ---
 
-## Step 3 — 🖥️ Build the data (pick ONE)
+## Step 3 — 🖥️ Build (or rebuild) the data
 
-**Option A — Real arXiv data (recommended).** Harvests ~1,500 recent CS papers
-(cached afterwards, so it only hits the network once).
+You **already have** a real-arXiv landscape, so this step is optional. Run it if
+you did Step 2 (to rebuild with the better methods) or changed the config:
 
-```bash
-python pipeline/run_pipeline.py
+```powershell
+python pipeline\run_pipeline.py
 ```
 
-- 📝 To change the corpus, edit [`configs/config.yaml`](configs/config.yaml):
-  `data.date_end` (set it to today's date for the freshest papers),
-  `data.max_papers`, and `data.arxiv_queries`.
-- When it finishes you'll see `papers=… clusters=… precision@k=…` and a report
-  in [`reports/validation_report.md`](reports/validation_report.md).
+- The raw harvest is cached in `data\raw\arxiv_harvest.csv`, so re-running
+  **reuses the same papers** and only redoes the analysis (no network).
+- When it finishes you'll see `papers=… clusters=… leads=… precision@k=…` and
+  an updated [`reports/validation_report.md`](../reports/validation_report.md).
+- Check which methods were actually used in `data\processed\meta.json` →
+  `"backends"` (e.g. `"embedding": "minilm"` instead of `"tfidf"`).
 
-**Option B — Offline demo.** Skip this step entirely and use the **“Load demo
-data”** button on the app's first screen (Step 4). Builds a small synthetic
-landscape in a few seconds, no internet needed.
+📝 To change the corpus, edit [`configs/config.yaml`](../configs/config.yaml):
+`data.date_end`, `data.max_papers`, `data.arxiv_queries` — then force a fresh
+harvest (see Step 7).
+
+> **Know this about the current corpus:** the arXiv harvest takes the *newest*
+> papers per category, so 1,500 papers only spans about one week
+> (2026-09-25 → 2026-10-02). Clusters and search are fine, but the **growth**
+> numbers (3/6/12-month windows) need a longer span. For meaningful trends,
+> raise `data.max_papers` substantially (e.g. `8000`, slower harvest) or use the
+> Kaggle snapshot (`data.source: kaggle`, see README).
+
+**Offline alternative:** with no data at all, the app's first screen offers a
+**"Load demo data"** button that builds a small synthetic landscape in seconds.
+(You don't need it — you already have real data.)
 
 ---
 
 ## Step 4 — 🖥️ Run the web app locally
 
-```bash
-streamlit run app/streamlit_app.py
+```powershell
+streamlit run app\streamlit_app.py
 ```
 
-Then 🌐 open the URL it prints (default <http://localhost:8501>).
+The app runs headless, so it **won't open a browser by itself** — 🌐 open
+<http://localhost:8501> manually. Stop it with `Ctrl+C`.
 
 **Using it:** type a topic (or click an example) → the map highlights matches →
 click or lasso points to inspect papers → open any area from *Research areas* →
@@ -81,84 +119,120 @@ bottom. Every paper links to arXiv.
 
 This is the deployment target named in the SRS. Two tracks — pick one.
 
-### Track A — Quick public demo (no data to upload)
+### One-time setup (both tracks)
 
-1. 🌐 Go to <https://huggingface.co/join> and create a free account.
-2. 🌐 Click **New → Space**. Set **SDK = Streamlit**, give it a name, create it.
-3. 🌐 Open the Space's **Files** tab → edit **`README.md`** so the top metadata
-   block reads:
-   ```
+1. 🌐 Create a free account at <https://huggingface.co/join>.
+2. 🌐 Create an **access token** with **write** permission at
+   <https://huggingface.co/settings/tokens>. When `git push` asks for a
+   password, paste this token (your username is your HF username).
+3. 🌐 Click **New → Space**, give it a name, choose **Streamlit** as the SDK
+   (if Streamlit isn't listed, pick **Docker → Streamlit**), and create it.
+4. 📝 Add this metadata block to the **very top** of the project's
+   `README.md` (your push replaces the Space's README, so it must live in your
+   repo). `python_version` matters: the pinned `numpy`/`scipy` need Python ≥ 3.11.
+
+   ```yaml
    ---
    title: ScholarGrid
    emoji: 🔭
+   colorFrom: blue
+   colorTo: indigo
    sdk: streamlit
+   sdk_version: 1.46.1
+   python_version: "3.12"
    app_file: app.py
    pinned: false
    ---
    ```
-4. 🖥️ Push the code (replace `USER`/`SPACE`):
-   ```bash
-   cd /home/amt/snap/RFE
-   git init && git add -A && git commit -m "ScholarGrid v1"
-   git remote add space https://huggingface.co/spaces/USER/SPACE
-   git push space main
+
+   Commit it:
+
+   ```powershell
+   git add README.md
+   git commit -m "Add Hugging Face Space metadata"
+   git push origin main
    ```
-   > `data/` is gitignored, so only code is pushed — that's intended here.
-5. 🌐 Wait for the Space to build, then open it and click **“Load demo data.”**
-   (The demo landscape rebuilds per container restart — fine for a demo.)
+
+5. 🖥️ Add the Space as a second remote (replace `USER`/`SPACE`):
+
+   ```powershell
+   git remote add space https://huggingface.co/spaces/USER/SPACE
+   ```
+
+### Track A — Quick public demo (code only)
+
+```powershell
+git push --force space main
+```
+
+`--force` is needed once because the new Space has its own initial commit.
+`data/` and `reports/` are gitignored, so only code is pushed. 🌐 Wait for the
+build (*Logs* tab), open the Space, and click **"Load demo data."** (The demo
+rebuilds whenever the container restarts — fine for a demo.)
 
 ### Track B — Public app with your real arXiv landscape
 
-Same as Track A, but also upload the precomputed artifacts so the app loads
-instantly with real data.
+Upload the precomputed artifacts too, so the Space opens straight onto real
+data. Do this on a separate **deploy branch** so the large files never end up
+on GitHub's `main`.
 
-1. Do Track A steps 1–3.
-2. 🖥️ Build the data locally first (Step 3, Option A).
-3. 🖥️ Store the large artifacts with Git LFS and force-add them (they're
-   normally gitignored):
-   ```bash
-   cd /home/amt/snap/RFE
-   git lfs install
-   git lfs track "*.npy" "*.pkl" "data/processed/papers.csv"
-   git add .gitattributes
-   git add -f data/processed reports
-   git commit -m "ScholarGrid v1 + precomputed landscape"
-   git remote add space https://huggingface.co/spaces/USER/SPACE
-   git push space main
-   ```
-   > Need Git LFS first? Install from <https://git-lfs.com> (`git lfs install`).
-4. 🌐 Open the Space — it loads your real landscape with no button press.
+```powershell
+git checkout -b hf-deploy
+git lfs install
+git lfs track "*.npy" "*.pkl" "data/processed/papers.csv"
+git add .gitattributes
+git add -f data/processed reports
+git commit -m "ScholarGrid v1 + precomputed landscape"
+git push --force space hf-deploy:main
+git checkout main
+```
 
-> **Tip:** Track B is smaller and faster if you did Step 2 with
-> `sentence-transformers` (the MiniLM embedder stores no large matrix; the
-> model is fetched on the Space at build time).
+🌐 Open the Space — it loads your real landscape with no button press.
+
+> - LFS is required: Hugging Face rejects binary files that aren't in LFS, and
+>   the TF-IDF model (`data/processed/embedder/tfidf.pkl`) is ~37 MB.
+> - If you did Step 2 and rebuilt (Step 3), the bundle is much smaller (MiniLM
+>   stores no large model file). Add `sentence-transformers` to
+>   `requirements.txt` on the deploy branch so the Space can embed queries the
+>   same way.
+> - Don't `git push origin hf-deploy` — keep that branch for the Space only.
 
 ---
 
-## Step 6 — 🌐🖥️ (Optional) Put the source on GitHub
+## Step 6 — 🖥️ Keep GitHub up to date
 
-```bash
-cd /home/amt/snap/RFE
-git init            # skip if already a repo from Step 5
-gh repo create scholargrid --public --source=. --push     # needs the GitHub CLI
-# or: create an empty repo on github.com, then:
-# git remote add origin https://github.com/USER/scholargrid.git && git push -u origin main
+The repo is already on GitHub (`origin`). After any change:
+
+```powershell
+git add -A
+git commit -m "Describe your change"
+git push origin main
 ```
+
+Generated data stays local (gitignored) — that's intended.
 
 ---
 
 ## Step 7 — 🖥️ (Optional, later) Refresh the data
 
-Re-run the pipeline whenever you want newer papers. Delete the cache to force a
-fresh harvest:
+To pull newer papers, update `data.date_end` in `configs/config.yaml` to today,
+delete the cache to force a fresh harvest, and re-run:
 
-```bash
-rm -f data/raw/arxiv_harvest.csv
-python pipeline/run_pipeline.py
+```powershell
+Remove-Item data\raw\arxiv_harvest.csv
+python pipeline\run_pipeline.py
 ```
 
-If you deployed Track B, repeat the Step 5B `git add -f … && git push` to update
-the live app.
+If you deployed Track B, update the live app:
+
+```powershell
+git checkout hf-deploy
+git merge main
+git add -f data/processed reports
+git commit -m "Refresh landscape"
+git push space hf-deploy:main
+git checkout main
+```
 
 ---
 
@@ -166,11 +240,17 @@ the live app.
 
 | Symptom | Fix |
 |---|---|
-| App says *“No precomputed artifacts found.”* | Do Step 3, or click **Load demo data**. |
-| `pip install sentence-transformers/umap/hdbscan` fails | You're likely on Python 3.14 — use 3.11/3.12 (Step 1 note), or skip Step 2. |
-| Harvest returns 0 papers | `data.date_end` in the config is before today — set it to today's date. |
-| Space build fails on big files | Use Git LFS (Step 5B) or deploy Track A. |
-| Want to force fresh data | `rm data/raw/arxiv_harvest.csv` then re-run the pipeline. |
+| `Python was not found` when running `python3` | On Windows use `py` (outside the venv) or `python` (inside the activated venv). Optionally disable the Store aliases: *Settings → Apps → Advanced app settings → App execution aliases*. |
+| `source : The term 'source' is not recognized` | That's the Linux command. Use `.\.venv\Scripts\Activate.ps1`. |
+| `running scripts is disabled on this system` | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, then activate again. |
+| `ModuleNotFoundError` (e.g. `streamlit`, `yaml`) | The venv isn't active or Step 1 wasn't run — activate it and `pip install -r requirements.txt`. |
+| App says *"No precomputed artifacts found."* | Run Step 3, or click **Load demo data**. |
+| `meta.json` still shows `tfidf` / `pca` / `kmeans` after Step 2 | Install into the **activated** venv, then re-run Step 3. |
+| Harvest returns 0 papers | `data.date_end` is before the newest papers — set it to today's date. |
+| Growth numbers look flat/meaningless | The corpus spans ~1 week — see the note in Step 3. |
+| Space build fails on `numpy`/`scipy` install | Add `python_version: "3.12"` to the README metadata (Step 5). |
+| Space push rejected for binary/large files | Use Git LFS (Track B) or deploy Track A. |
+| `git push space` asks for a password | Use your Hugging Face **access token**, not your account password. |
 
 That's everything. After Step 4 it's usable locally; after Step 5 it's a public
 web app.
