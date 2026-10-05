@@ -115,7 +115,7 @@ def main() -> None:
     c1, c2, c3 = st.columns([6, 1, 1])
     query = c1.text_input("Search", key="q", label_visibility="collapsed",
                           placeholder="Search a research topic or question…")
-    with c2.popover("⚙️ Options", width="stretch"):
+    with c2.popover("⚙️ Options", use_container_width=True):
         top_k = st.slider("Results to retrieve", 5, 60, int(cfg["search"]["top_k"]), step=5)
         cats = sorted(df["primary_category"].dropna().unique().tolist())
         sel_cats = st.multiselect("Categories", cats, default=[])
@@ -126,7 +126,7 @@ def main() -> None:
         else:
             date_range = st.slider("Date range", dmin, dmax, (dmin, dmax))
         show_leads = st.toggle("Show investigation leads on map", value=False)
-    c3.button("Clear", width="stretch", on_click=_reset)
+    c3.button("Clear", use_container_width=True, on_click=_reset)
 
     # Example chips (only when nothing is being searched).
     if not query:
@@ -134,7 +134,7 @@ def main() -> None:
         chip_cols = st.columns(len(EXAMPLES))
         for col, ex in zip(chip_cols, EXAMPLES):
             col.button(ex, key=f"ex_{ex}", on_click=lambda e=ex: st.session_state.update(q=e),
-                       width="stretch")
+                       use_container_width=True)
 
     # ---- Apply filters to the visible map --------------------------------
     mask = (df["date"].dt.date >= date_range[0]) & (df["date"].dt.date <= date_range[1])
@@ -154,7 +154,7 @@ def main() -> None:
         fig = _landscape(df, labels, clusters, view_idx, search_res,
                          leads if show_leads else None,
                          None if search_res else st.session_state.focus_cluster)
-        event = st.plotly_chart(fig, width="stretch", key="map",
+        event = st.plotly_chart(fig, use_container_width=True, key="map",
                                 on_select="rerun",
                                 selection_mode=("points", "box", "lasso"))
         st.caption("Tip: click or lasso points to inspect papers. The map is a 2D view, not evidence by itself.")
@@ -341,7 +341,7 @@ def _panel_overview(clusters, growth):
         g = growth_of(growth, cid)
         rel = g["windows"].get(str(growth["default_window"]), {}).get("relative_growth") if g else None
         col1, col2 = st.columns([5, 2])
-        if col1.button(f"{info['label']}", key=f"ov_{cid}", width="stretch"):
+        if col1.button(f"{info['label']}", key=f"ov_{cid}", use_container_width=True):
             st.session_state.focus_cluster = cid
             st.rerun()
         col2.markdown(f"<div style='padding-top:.45rem'>{info['size']} · {_growth_badge(rel)}</div>",
@@ -366,7 +366,7 @@ def _growth_table(clusters, growth):
             "Stable": "yes" if g["stability"]["stable"] else "varies",
         })
     table = pd.DataFrame(rows).sort_values("Relative growth", ascending=False)
-    st.dataframe(table, width="stretch", hide_index=True)
+    st.dataframe(table, use_container_width=True, hide_index=True)
 
 
 def _leads_section(leads):
