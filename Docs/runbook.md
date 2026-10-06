@@ -20,11 +20,13 @@ short and current; anything here should be runnable as written.
   build and `configs/refresh.yaml` (OAI-PMH) for weekly updates. Select one with
   `--config` or `SCHOLARGRID_CONFIG`.
 - Secrets come from environment variables only. Never put them in YAML or Git:
-  - `OPENALEX_MAILTO`: contact email for the OpenAlex polite pool (required in production).
+  - `OPENALEX_MAILTO`: contact email for the OpenAlex polite pool (strongly recommended;
+    without it large enrichment runs get rate-limited).
   - `SENTRY_DSN`: enables error tracking for the pipeline and app (optional).
   - `S2_API_KEY`: Semantic Scholar cross-check (optional).
 - `SCHOLARGRID_ENV=production` turns on the production checks: no synthetic
-  fallback, a contact email is required, and quality failures stop the build.
+  fallback, quality failures stop the build, and failing required validation
+  gates block publishing.
 
 ## First production build
 

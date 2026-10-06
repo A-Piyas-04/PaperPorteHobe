@@ -41,12 +41,19 @@ def run_checks(df: pd.DataFrame, cfg: Config, previous_count: Optional[int] = No
     checks.append(_check("time_span_months", span >= q["min_span_months"], span, q["min_span_months"]))
 
     if len(df):
-        months = pd.period_range(df["date"].min(), df["date"].max(), freq="M").strftime("%Y-%m")
+        latest = df["date"].max()
+        months = pd.period_range(df["date"].min(), latest, freq="M").strftime("%Y-%m")
+        # A trailing month that the data doesn't reach the end of is still filling up.
+        partial = len(months) > 1 and latest.day < latest.days_in_month - 3
+        if partial:
+            months = months[:-1]
         per_month = df["year_month"].value_counts().reindex(months, fill_value=0)
         worst = int(per_month.min())
         gaps = [m for m, n in per_month.items() if n < q["min_papers_per_month"]]
-        checks.append(_check("min_papers_per_month", not gaps, worst, q["min_papers_per_month"],
-                             f"months below threshold: {gaps[:12]}" if gaps else ""))
+        detail = f"months below threshold: {gaps[:12]}" if gaps else ""
+        if partial:
+            detail = (detail + f" (partial month {latest:%Y-%m} not checked)").strip()
+        checks.append(_check("min_papers_per_month", not gaps, worst, q["min_papers_per_month"], detail))
         share = df["primary_category"].value_counts(normalize=True)
         top_cat, top_share = str(share.index[0]), round(float(share.iloc[0]), 4)
         checks.append(_check("max_category_share", top_share <= q["max_category_share"],

@@ -49,6 +49,14 @@ def test_quality_checks_pass_and_fail(cfg, papers):
         run_checks(papers, cfg)
 
 
+def test_quality_ignores_unfinished_last_month(cfg, papers):
+    cfg.raw["quality"].update(min_papers_per_month=5, min_span_months=0, max_category_share=1)
+    tail = papers.tail(2).assign(date=pd.Timestamp("2025-01-03"), year_month="2025-01",
+                                 arxiv_id=["x1", "x2"], title=["Tail a", "Tail b"])
+    res = run_checks(pd.concat([papers, tail], ignore_index=True), cfg)
+    assert "min_papers_per_month" not in res["failed"]
+
+
 def test_quality_detects_month_gaps_and_duplicates(cfg, papers):
     cfg.raw["quality"]["min_papers_per_month"] = 1
     gappy = papers[~papers["year_month"].isin(["2023-06", "2023-07"])]
