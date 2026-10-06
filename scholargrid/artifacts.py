@@ -1,8 +1,10 @@
-"""Precomputed-artifact IO (FR / NFR-03 / deployment).
+"""Precomputed-artifact IO (NFR-03 / deployment).
 
-The expensive offline pipeline writes all results here; the deployed app only
-loads these artifacts and performs lightweight query embedding + nearest-
-neighbour retrieval (Deployment Requirements, NFR-01).
+The offline pipeline writes a bundle into ``paths.processed_dir`` (staging);
+publishing copies it into a versioned release (:mod:`scholargrid.release`).
+The app loads whichever bundle :func:`scholargrid.release.resolve_bundle_dir`
+points to and only does query embedding + retrieval (NFR-01). Embeddings are
+memory-mapped so large corpora do not need to fit in RAM twice.
 """
 from __future__ import annotations
 
@@ -13,12 +15,15 @@ from typing import Dict, List, Optional
 import numpy as np
 import pandas as pd
 
+from .bm25 import BM25Index
 from .config import Config
-from .embeddings import Embedder
+from .embeddings import Embedder, paper_text
+from .index import NeighborIndex
 from .utils import ensure_dir, get_logger, load_json, save_json
 
 log = get_logger("artifacts")
 
+PAPERS_PARQUET = "papers.parquet"
 PAPERS_CSV = "papers.csv"
 EMBEDDINGS_NPY = "embeddings.npy"
 REDUCED_NPY = "reduced.npy"
@@ -29,24 +34,35 @@ EDGES_JSON = "edges.json"
 NEIGHBORS_JSON = "neighbors.json"
 META_JSON = "meta.json"
 EMBEDDER_DIR = "embedder"
+_CSV_MAX_ROWS = 20000
 
-_OPTIONAL_DEFAULTS = {"authors": "", "venue": "", "references": "",
-                      "cited_by_count": 0, "reference_count": 0}
+_OPTIONAL_DEFAULTS = {"authors": "", "venue": "", "venue_type": "", "references": "",
+                      "openalex_id": "", "author_ids": "", "topic": "",
+                      "cited_by_count": 0, "reference_count": 0,
+                      "citation_velocity": 0.0, "sample_weight": 1.0}
 
 
 def save_bundle(cfg: Config, df: pd.DataFrame, embeddings: np.ndarray,
                 reduced: np.ndarray, coords2d: np.ndarray, labels: np.ndarray,
                 clusters_meta: Dict, growth: Dict, sparse_leads: list,
                 embedder: Embedder, meta: Dict,
-                edges: Optional[List] = None, neighbors: Optional[Dict] = None) -> None:
-    out = ensure_dir(cfg.processed_dir)
+                edges: Optional[List] = None, neighbors: Optional[Dict] = None,
+                bm25: Optional[BM25Index] = None, index: Optional[NeighborIndex] = None,
+                out: Optional[str] = None) -> str:
+    out = ensure_dir(out or cfg.processed_dir)
     table = df.copy()
     table["cluster_id"] = labels
     table["x2d"] = coords2d[:, 0]
     table["y2d"] = coords2d[:, 1]
-    table.to_csv(os.path.join(out, PAPERS_CSV), index=False)
+    table.to_parquet(os.path.join(out, PAPERS_PARQUET), index=False)
+    csv_path = os.path.join(out, PAPERS_CSV)
+    if len(table) <= _CSV_MAX_ROWS:
+        table.drop(columns=["references"], errors="ignore").to_csv(csv_path, index=False)
+    elif os.path.exists(csv_path):
+        os.remove(csv_path)
 
-    np.save(os.path.join(out, EMBEDDINGS_NPY), embeddings.astype(np.float32))
+    dtype = np.float16 if cfg["embedding"]["dtype"] == "float16" else np.float32
+    np.save(os.path.join(out, EMBEDDINGS_NPY), np.asarray(embeddings).astype(dtype))
     np.save(os.path.join(out, REDUCED_NPY), reduced.astype(np.float32))
     save_json({str(k): v for k, v in clusters_meta.items()}, os.path.join(out, CLUSTERS_JSON))
     save_json(growth, os.path.join(out, GROWTH_JSON))
@@ -55,7 +71,12 @@ def save_bundle(cfg: Config, df: pd.DataFrame, embeddings: np.ndarray,
     save_json(neighbors or {}, os.path.join(out, NEIGHBORS_JSON))
     save_json(meta, os.path.join(out, META_JSON))
     embedder.save(os.path.join(out, EMBEDDER_DIR))
+    if bm25 is not None:
+        bm25.save(out)
+    if index is not None:
+        index.save(out)
     log.info("Saved artifact bundle to %s", out)
+    return out
 
 
 @dataclass
@@ -67,38 +88,73 @@ class Bundle:
     growth: Dict
     sparse_leads: list
     meta: Dict
-    embedder: Embedder
+    embedder: Optional[Embedder]
     edges: List = field(default_factory=list)
     neighbors: Dict = field(default_factory=dict)
+    bm25: Optional[BM25Index] = None
+    index: Optional[NeighborIndex] = None
+    path: str = ""
+    embedder_error: Optional[str] = None
 
 
 def _load_optional(path: str, default):
     return load_json(path) if os.path.exists(path) else default
 
 
-def load_bundle(cfg: Config) -> Bundle:
-    out = cfg.processed_dir
-    df = pd.read_csv(os.path.join(out, PAPERS_CSV), dtype={"arxiv_id": str})
+def load_papers(out: str) -> pd.DataFrame:
+    pq = os.path.join(out, PAPERS_PARQUET)
+    if os.path.exists(pq):
+        df = pd.read_parquet(pq)
+    else:
+        df = pd.read_csv(os.path.join(out, PAPERS_CSV), dtype={"arxiv_id": str})
+    df["arxiv_id"] = df["arxiv_id"].astype(str)
     df["date"] = pd.to_datetime(df["date"])
+    if "year_month" not in df.columns:
+        df["year_month"] = df["date"].dt.strftime("%Y-%m")
     for col, default in _OPTIONAL_DEFAULTS.items():
         if col not in df.columns:
             df[col] = default
         df[col] = df[col].fillna(default)
     df["cited_by_count"] = df["cited_by_count"].astype(int)
     df["reference_count"] = df["reference_count"].astype(int)
-    embeddings = np.load(os.path.join(out, EMBEDDINGS_NPY))
+    return df
+
+
+def load_bundle(cfg: Config, directory: Optional[str] = None) -> Bundle:
+    """Load a bundle. If the embedding model cannot be loaded the bundle still
+    loads with ``embedder=None`` so the app can fall back to BM25 search."""
+    from .release import resolve_bundle_dir
+
+    out = directory or resolve_bundle_dir(cfg)
+    df = load_papers(out)
+    embeddings = np.load(os.path.join(out, EMBEDDINGS_NPY), mmap_mode="r")
     labels = df["cluster_id"].to_numpy().astype(int)
-    clusters_raw = load_json(os.path.join(out, CLUSTERS_JSON))
-    clusters_meta = {int(k): v for k, v in clusters_raw.items()}
+    clusters_meta = {int(k): v for k, v in load_json(os.path.join(out, CLUSTERS_JSON)).items()}
     growth = load_json(os.path.join(out, GROWTH_JSON))
     sparse_leads = load_json(os.path.join(out, SPARSE_JSON))
     meta = load_json(os.path.join(out, META_JSON))
     edges = _load_optional(os.path.join(out, EDGES_JSON), [])
     neighbors = _load_optional(os.path.join(out, NEIGHBORS_JSON), {})
-    embedder = Embedder.load(os.path.join(out, EMBEDDER_DIR), cfg)
+
+    embedder, err = None, None
+    try:
+        embedder = Embedder.load(os.path.join(out, EMBEDDER_DIR), cfg)
+    except Exception as exc:
+        err = f"{type(exc).__name__}: {exc}"
+        log.error("Embedding model failed to load (%s); search will use BM25 only.", err)
+
+    bm25 = BM25Index.load(out)
+    if bm25 is None and len(df) <= 50000:
+        bm25 = BM25Index.build(paper_text(df))
+    index = NeighborIndex.load(out, embeddings, cfg)
     return Bundle(df, embeddings, labels, clusters_meta, growth, sparse_leads, meta,
-                  embedder, edges, neighbors)
+                  embedder, edges, neighbors, bm25, index, out, err)
 
 
 def bundle_exists(cfg: Config) -> bool:
-    return os.path.exists(os.path.join(cfg.processed_dir, META_JSON))
+    from .release import resolve_bundle_dir
+
+    try:
+        return os.path.exists(os.path.join(resolve_bundle_dir(cfg), META_JSON))
+    except FileNotFoundError:
+        return False

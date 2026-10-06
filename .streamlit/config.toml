@@ -20,3 +20,8 @@ level = "error"
 
 [browser]
 gatherUsageStats = false
+
+[client]
+# Never show raw tracebacks to users; errors are logged / sent to Sentry.
+showErrorDetails = "none"
+toolbarMode = "viewer"

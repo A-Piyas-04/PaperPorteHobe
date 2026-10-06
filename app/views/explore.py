@@ -3,15 +3,18 @@
 The heavy lifting happens client-side in the ``explorer`` React component.
 This page only builds the payload once, runs semantic search when the
 component asks for it, and hands requests (area pages) back to Streamlit.
+
+Large corpora are capped at ``app.max_graph_nodes`` papers, sampled per area
+(most-cited first), and re-indexed so the component's positional indices stay
+valid; search highlights are mapped onto the rendered subset.
 """
 from __future__ import annotations
 
+import numpy as np
 import streamlit as st
 
 import ui
 from components.explorer import explorer, is_built
-from scholargrid.config import load_config
-from scholargrid.search import search as semantic_search
 
 _ABSTRACT_CHARS = 900
 _PAGE_CSS = """
@@ -31,16 +34,32 @@ def _truncate(text, n: int = _ABSTRACT_CHARS) -> str:
     return text if len(text) <= n else text[: n - 1].rsplit(" ", 1)[0] + "…"
 
 
+def _select_nodes(bundle, cap: int) -> np.ndarray:
+    df = bundle.df
+    n = len(df)
+    if n <= cap:
+        return np.arange(n)
+    order = df.assign(_i=np.arange(n)).sort_values("cited_by_count", ascending=False)
+    picks = []
+    for _, g in order.groupby("cluster_id", sort=False):
+        quota = max(1, int(round(cap * len(g) / n)))
+        picks.append(g["_i"].to_numpy()[:quota])
+    return np.sort(np.concatenate(picks)[:cap])
+
+
 @st.cache_resource(show_spinner=False)
-def _payload(version: str) -> dict:
+def _payload(version: str) -> tuple[dict, dict]:
     bundle = ui.get_bundle()
     df, clusters = bundle.df, bundle.clusters_meta
     colors = ui.area_colors(clusters)
+    keep = _select_nodes(bundle, int(ui.get_config()["app"]["max_graph_nodes"]))
+    pos = {int(orig): p for p, orig in enumerate(keep)}
 
     papers = []
-    for i, r in enumerate(df.itertuples(index=False)):
+    sub = df.iloc[keep]
+    for p, r in enumerate(sub.itertuples(index=False)):
         papers.append({
-            "i": i,
+            "i": p,
             "id": str(r.arxiv_id),
             "t": str(r.title),
             "au": str(r.authors or ""),
@@ -55,29 +74,42 @@ def _payload(version: str) -> dict:
             "ab": _truncate(r.abstract),
         })
 
+    if len(keep) == len(df):
+        edges, neighbors = bundle.edges, bundle.neighbors
+    else:
+        edges = [[pos[a], pos[b], w] for a, b, w in bundle.edges if a in pos and b in pos]
+        neighbors = {str(pos[int(k)]): [[pos[j], s] for j, s in v if j in pos]
+                     for k, v in bundle.neighbors.items() if int(k) in pos}
+
     areas = [{"id": int(c["cluster_id"]), "name": ui.area_name(clusters, c["cluster_id"]),
               "color": colors[int(c["cluster_id"])], "size": int(c.get("size", 0))}
              for c in sorted(clusters.values(), key=lambda c: -c.get("size", 0))]
-    cats = df["primary_category"].value_counts().head(30)
-    cited_share = float((df["cited_by_count"] > 0).mean()) if len(df) else 0.0
+    cats = sub["primary_category"].value_counts().head(30)
+    cited_share = float((sub["cited_by_count"] > 0).mean()) if len(sub) else 0.0
 
-    return {
+    payload = {
         "version": version,
         "papers": papers,
-        "edges": bundle.edges,
-        "neighbors": bundle.neighbors,
+        "edges": edges,
+        "neighbors": neighbors,
         "areas": areas,
         "categories": [[str(k), int(v)] for k, v in cats.items()],
         "sizeBy": "citations" if cited_share >= 0.2 else "links",
     }
+    return payload, pos
+
+
+def _remap(hl: dict | None, pos: dict) -> dict | None:
+    if not hl:
+        return hl
+    items = [[pos[int(i)], s] for i, s in hl.get("items", []) if int(i) in pos]
+    return {**hl, "items": items}
 
 
 def build_highlight(query: str, req=None) -> dict:
-    """Run semantic search and shape the result for the component."""
-    bundle = ui.get_bundle()
-    top_k = int(load_config()["search"]["top_k"])
-    res = semantic_search(query, bundle.embedder, bundle.embeddings, bundle.df,
-                          bundle.labels, bundle.clusters_meta, top_k=top_k)
+    """Run search and shape the result for the component (original indices)."""
+    top_k = int(ui.get_config()["search"]["top_k"])
+    res = ui.run_search(ui.bundle_version(), query[: ui.max_query_chars()], top_k)
     items = [[int(i), round(float(r["score"]), 4)]
              for i, r in zip(res["result_indices"], res["results"])]
     return {"query": query, "items": items, "req": req, "ambiguous": bool(res.get("ambiguous"))}
@@ -92,11 +124,16 @@ def render() -> None:
         return
 
     bundle = ui.get_bundle()
-    payload = _payload(bundle.meta.get("generated_at", "v1"))
+    payload, pos = _payload(ui.bundle_version())
+    if len(pos) < len(bundle.df):
+        st.caption(f"Showing {len(pos):,} of {len(bundle.df):,} papers (most-cited per area). "
+                   "Search still covers every paper.")
     focus = st.session_state.pop("focus_cluster", None)
     select = st.session_state.pop("explore_select", None)
+    if select is not None:
+        select = pos.get(int(select))
 
-    event = explorer(payload, highlight=st.session_state.get("explore_hl"),
+    event = explorer(payload, highlight=_remap(st.session_state.get("explore_hl"), pos),
                      focus_area=focus, select=select, key="explorer")
 
     if not event or event.get("nonce") == st.session_state.get("_explore_nonce"):

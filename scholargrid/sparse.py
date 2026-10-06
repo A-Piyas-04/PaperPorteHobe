@@ -18,8 +18,9 @@ import numpy as np
 import pandas as pd
 
 from .config import Config
+from .index import exact_topk
 from .reduce import project_2d
-from .utils import get_logger
+from .utils import get_logger, l2_normalize
 
 log = get_logger("sparse")
 
@@ -55,6 +56,11 @@ def detect_sparse(df: pd.DataFrame, embeddings: np.ndarray, coords2d: np.ndarray
 
     scfg = cfg["sparse"]
     pct = float(scfg["low_density_percentile"])
+    if len(df) < int(scfg["min_corpus_size"]):
+        log.info("Sparse leads skipped: %d papers < sparse.min_corpus_size=%d "
+                 "(sparsity in small samples is mostly sampling noise).",
+                 len(df), int(scfg["min_corpus_size"]))
+        return []
 
     # Step 1: 2D low-density anchors that border clustered papers.
     base_low = _low_density_mask(coords2d, pct)
@@ -71,9 +77,9 @@ def detect_sparse(df: pd.DataFrame, embeddings: np.ndarray, coords2d: np.ndarray
     # Step 2: high-dimensional verification. Keep anchors that are also sparse in
     # embedding space (above-median distance to their k-th nearest neighbour).
     k = min(int(scfg["hd_neighbors"]), len(embeddings) - 1)
-    nn_hd = NearestNeighbors(n_neighbors=k + 1, metric="cosine").fit(embeddings)
-    hd_dist, hd_idx = nn_hd.kneighbors(embeddings)
-    hd_sparsity = hd_dist[:, -1]
+    unit = l2_normalize(np.asarray(embeddings, dtype=np.float32))
+    hd_idx, hd_sims = exact_topk(unit, unit, k + 1)
+    hd_sparsity = 1.0 - hd_sims[:, -1]
     hd_threshold = float(np.median(hd_sparsity))
     verified = [c for c in candidates if hd_sparsity[c] >= hd_threshold]
     log.info("Step2: %d anchors survive high-dimensional check.", len(verified))
@@ -86,7 +92,7 @@ def detect_sparse(df: pd.DataFrame, embeddings: np.ndarray, coords2d: np.ndarray
     survival = {c: 1 for c in verified}  # base projection counts as one
     seeds = list(scfg["robustness_seeds"])
     verified_set = list(verified)
-    others = np.array([i for i in range(len(embeddings)) if i not in set(verified_set)])
+    others = np.setdiff1d(np.arange(len(embeddings)), np.array(verified_set))
     for seed in seeds:
         rng = np.random.default_rng(seed)
         keep = rng.choice(others, size=int(0.8 * len(others)), replace=False)
@@ -130,6 +136,7 @@ def _build_leads(df, labels, coords2d, hd_idx, robust, survival, total,
                 "primary_category": r["primary_category"],
                 "date": r["date"].strftime("%Y-%m-%d"),
                 "cluster_id": int(labels[j]),
+                "cited_by_count": int(r.get("cited_by_count", 0) or 0),
             })
         leads.append({
             "anchor_arxiv_id": df.iloc[c]["arxiv_id"],

@@ -1,31 +1,48 @@
 # ScholarGrid — Research Landscape Explorer
 # Central configuration for the offline analytical pipeline (NFR-03 reproducibility).
 # Every stage reads from this file; all parameters and seeds live here.
+#
+# This is the local / development configuration. `configs/production.yaml`
+# extends it with the strict production settings (bulk sources, no synthetic
+# fallback, enforced release gates). The schema is validated on load
+# (scholargrid/schema.py), so typos fail fast with a clear message.
+#
+# Secrets never live here. They are read from environment variables:
+#   OPENALEX_MAILTO, S2_API_KEY, SENTRY_DSN, SCHOLARGRID_ENV, SCHOLARGRID_RELEASE
 
-pipeline_version: "1.0.0"
+pipeline_version: "2.0.0"
 seed: 42
+environment: development        # development | production
 
 paths:
   raw_dir: data/raw
-  processed_dir: data/processed
+  processed_dir: data/processed  # staging bundle written by every run
   reports_dir: reports
+  stages_dir: data/stages        # cached per-stage outputs
+  releases_dir: data/releases    # published, versioned bundles
 
 # ---------------------------------------------------------------------------
 # FR-01  Research dataset ingestion
 # ---------------------------------------------------------------------------
 data:
-  # source: "arxiv_api" (live harvest), "kaggle" (local snapshot json), or "synthetic"
-  # (offline, deterministic demo corpus). If a network source fails, the pipeline
-  # falls back to "synthetic" so the run always completes.
+  # source: "arxiv_api" (latest papers only, ad hoc demos), "kaggle" (bulk
+  # snapshot backfill), "oai_pmh" (date-ranged official bulk harvest) or
+  # "synthetic" (offline, deterministic demo corpus).
   source: arxiv_api
-  categories_prefix: "cs."        # retain cs.* papers only
-  # Documented recent time window (inclusive). Papers outside are dropped.
+  # profile sets the corpus size: dev (~5k), standard (~50k), full (no cap),
+  # or custom (uses max_papers below).
+  profile: custom
+  max_papers: 1500
   date_start: "2023-01-01"
-  date_end: "2026-10-05"
-  max_papers: 1500                # corpus cap for a lightweight MVP
-  use_cache: true                 # cache the raw harvest under data/raw (reproducible, kinder to arXiv)
-  min_abstract_chars: 200         # drop empty / very short abstracts
-  # Topic queries used to harvest a spread across CS (arxiv_api source).
+  date_end: "2026-10-05"         # or "auto" for today
+  categories: all_cs             # "all_cs" or an explicit list like [cs.LG, cs.CL]
+  # A failed harvest falls back to synthetic data only when this is true.
+  # Production must keep it false so a broken harvest fails the build.
+  allow_synthetic_fallback: true
+  sampling: stratified           # stratified (primary_category x year_month) | newest | none
+  use_cache: true                # cache raw harvests under data/raw
+  min_abstract_chars: 200
+  language_filter: true          # drop abstracts that are clearly not English
   arxiv_queries:
     - "cat:cs.LG"
     - "cat:cs.CL"
@@ -36,63 +53,104 @@ data:
     - "cat:cs.DC"
     - "cat:cs.SE"
   kaggle_json: data/raw/arxiv-metadata-oai-snapshot.json
+  oai_pmh:
+    endpoint: "https://oaipmh.arxiv.org/oai"
+    set: "cs"
+    metadata_prefix: "arXiv"
+    sleep_seconds: 5             # arXiv asks for polite, spaced requests
+    max_retries: 5
 
 # ---------------------------------------------------------------------------
-# Optional enrichment (FR-09 groundwork): citations, references, venue
+# Storage: raw Parquet partitions + optional DuckDB working store
+# ---------------------------------------------------------------------------
+storage:
+  backend: parquet               # parquet | duckdb
+  path: data/scholargrid.duckdb
+
+# ---------------------------------------------------------------------------
+# Data quality checks (run on every build)
+# ---------------------------------------------------------------------------
+quality:
+  fail_on_error: false           # production: true
+  min_span_months: 0             # production: 24
+  min_papers_per_month: 0        # production: 50
+  max_category_share: 0.6
+  max_missing_rate: 0.005
+  max_row_change: 0.2            # vs. previous release
+
+# ---------------------------------------------------------------------------
+# Optional enrichment: citations, references, venues, authors (OpenAlex)
 # ---------------------------------------------------------------------------
 enrich:
-  openalex: true          # look papers up in OpenAlex by arXiv DOI (cached in data/raw)
-  mailto: ""              # optional contact email for OpenAlex's polite pool
-  batch: 50               # DOIs per request (max 100)
+  openalex: true
+  mailto: ""                     # or set OPENALEX_MAILTO (polite pool)
+  batch: 50                      # DOIs per request (max 100)
+  title_fallback: false          # fuzzy title lookup for unmatched papers (1 request each)
+  title_fallback_limit: 200
+  miss_retry_days: 1
+  refresh_schedule:              # citation refresh interval by paper age
+    lt_3m_days: 7
+    lt_24m_days: 30
+    older_days: 90
+  semantic_scholar: false        # needs S2_API_KEY
 
 # ---------------------------------------------------------------------------
 # Paper graph (Explore view): similarity edges between papers
 # ---------------------------------------------------------------------------
 graph:
-  k_neighbors: 6          # nearest neighbours linked per paper
-  coupling_boost: 0.15    # extra edge weight per shared reference (capped)
+  k_neighbors: 6
+  coupling_boost: 0.15
 
 # ---------------------------------------------------------------------------
 # FR-02  Paper embeddings
 # ---------------------------------------------------------------------------
 embedding:
-  # backend: "auto" prefers sentence-transformers (all-MiniLM-L6-v2) when
-  # importable, otherwise uses the reproducible "tfidf" backend
-  # (TfidfVectorizer -> TruncatedSVD -> L2 normalise). Force with "minilm"/"tfidf".
+  # backend: "auto" prefers sentence-transformers when importable, otherwise
+  # the reproducible "tfidf" backend. Force with "minilm"/"tfidf".
   backend: auto
   model_name: "all-MiniLM-L6-v2"
+  model_revision: null           # pin a Hugging Face commit hash in production
+  device: auto                   # auto | cpu | cuda
+  dtype: float32                 # float16 halves the on-disk size
+  incremental: true              # reuse cached vectors for unchanged papers
   tfidf_dims: 256
   tfidf_max_features: 20000
   batch_size: 64
 
 # ---------------------------------------------------------------------------
+# Nearest-neighbour index (search + graph)
+# ---------------------------------------------------------------------------
+index:
+  backend: auto                  # auto | exact | faiss_hnsw
+  exact_threshold: 20000         # auto uses exact search below this many papers
+  m: 32
+  ef_construction: 200
+  ef_search: 128
+  recall_sample: 200             # queries used to measure ANN recall@25
+
+# ---------------------------------------------------------------------------
 # FR-03  Clustering (analytical dimensionality reduction + density clustering)
 # ---------------------------------------------------------------------------
 reduce:
-  # Analytical reduction to ~5-10 dims. backend: "auto" prefers UMAP, else PCA.
   backend: auto
   n_components: 8
   umap_n_neighbors: 15
   umap_min_dist: 0.0
+  fit_sample: 60000              # fit UMAP on a sample this large, transform the rest
 
 cluster:
-  # backend: "auto" prefers HDBSCAN, else density clustering (DBSCAN). If the
-  # density fallback underperforms on embeddings that lack sharp density valleys
-  # (typical for the TF-IDF fallback), a silhouette-selected KMeans is used
-  # instead, with far-from-centroid points kept as noise (-1).
   backend: auto
-  min_cluster_size: 15
+  min_cluster_size: 15           # integer, or "auto" (min_cluster_fraction of corpus)
+  min_cluster_fraction: 0.001
   min_samples: 5
-  # HDBSCAN cluster selection: "leaf" extracts finer-grained clusters (preferred
-  # for a landscape view); "eom" takes the few most-persistent clusters.
   hdbscan_cluster_selection_method: leaf
-  fallback_min_clusters: 4      # engage KMeans fallback if the chosen backend yields fewer
-  kmeans_k_range: [5, 14]       # k search range for the KMeans fallback
-  noise_percentile: 98          # points beyond this centroid-distance pctile -> noise
+  fallback_min_clusters: 4
+  kmeans_k_range: [5, 14]
+  noise_percentile: 98
+  stability_seeds: [0, 1, 2]     # subsample re-clustering for the ARI stability check
+  match_previous: true           # keep cluster IDs stable across refreshes
+  match_min_score: 0.3
 
-# ---------------------------------------------------------------------------
-# FR-04  Cluster labels (c-TF-IDF keywords + representative papers)
-# ---------------------------------------------------------------------------
 labeling:
   top_keywords: 8
   n_representative: 5
@@ -101,41 +159,83 @@ labeling:
 # FR-05  2D landscape (separate 2D projection for visualisation only)
 # ---------------------------------------------------------------------------
 landscape:
-  backend: auto          # UMAP(2) when available, else PCA(2)
+  backend: auto
   umap_n_neighbors: 15
   umap_min_dist: 0.1
+  fit_sample: 60000
 
 # ---------------------------------------------------------------------------
 # FR-07  Publication-growth analysis
 # ---------------------------------------------------------------------------
 growth:
-  # reference_date: "auto" uses the latest included paper date.
   reference_date: auto
   windows_months: [3, 6, 12]
   default_window: 6
+  min_papers_per_period: 30      # both compared periods need this many papers
+  bootstrap_samples: 500
+  ci_level: 0.9
+  require_stable: true
+  max_cv: 0.5
+  backtest_months: 12
 
 # ---------------------------------------------------------------------------
 # FR-06  Semantic search
 # ---------------------------------------------------------------------------
 search:
   top_k: 25
+  hybrid: true                   # BM25 + dense, fused with Reciprocal Rank Fusion
+  rrf_k: 60
+  candidate_k: 100
+  rerank: false                  # cross-encoder re-ranking of the top candidates
+  rerank_model: "cross-encoder/ms-marco-MiniLM-L-6-v2"
+  max_query_chars: 300
 
 # ---------------------------------------------------------------------------
 # FR-08  Sparse-neighborhood exploration
 # ---------------------------------------------------------------------------
 sparse:
-  grid_size: 24                 # 2D density grid resolution
-  low_density_percentile: 20    # cells below this density are candidates
-  min_neighbor_density: 1       # candidate must border a populated (cluster) cell
-  hd_neighbors: 15              # neighbours checked in high-dim space
-  robustness_seeds: [0, 1, 2]   # re-project under several seeds
-  min_robustness: 0.5           # fraction of seeds a lead must survive
+  min_corpus_size: 1000          # production: 20000 (sparsity in small samples is noise)
+  grid_size: 24
+  low_density_percentile: 20
+  min_neighbor_density: 1
+  hd_neighbors: 15
+  robustness_seeds: [0, 1, 2]
+  min_robustness: 0.5
   max_leads: 12
 
 # ---------------------------------------------------------------------------
-# FR-16 / FR-17 / FR-18  Validation
+# FR-16 / FR-17 / FR-18  Validation and release gates
 # ---------------------------------------------------------------------------
 validation:
   queries_file: configs/validation_queries.json
+  judgments_file: configs/search_judgments.json   # optional graded (0/1/2) judgments
   search_top_k: 10
-  alternate_cutoffs: ["2025-06-30", "2025-03-31"]
+  recall_k: 25
+  alternate_cutoffs_months: [3, 6]                # extra reference dates, months before the latest paper
+  enforce_gates: false           # production: true (publish refuses failing bundles)
+  gates:
+    search_ndcg_at_10: 0.75
+    search_precision_at_10: 0.85
+    min_span_months: 24
+    max_noise_fraction: 0.35
+    min_cluster_stability_ari: 0.5
+  required_gates: [search_ndcg_at_10, quality_checks, min_cluster_stability_ari]
+
+# ---------------------------------------------------------------------------
+# Data releases (versioned bundles + rollback)
+# ---------------------------------------------------------------------------
+release:
+  enabled: true
+  keep_last: 5
+  pin: null                      # serve this release id (rollback); or set SCHOLARGRID_RELEASE
+
+# ---------------------------------------------------------------------------
+# Operations
+# ---------------------------------------------------------------------------
+monitoring:
+  json_logs: false               # structured JSON logs for the pipeline
+  stale_after_days: 14           # app shows a staleness banner after this
+
+app:
+  max_graph_nodes: 20000         # Explore renders at most this many papers (sampled per area)
+  pre_warm: true                 # load the bundle and embedding model at startup

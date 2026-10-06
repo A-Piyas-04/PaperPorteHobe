@@ -73,7 +73,7 @@ def _detail(bundle, cid: int) -> None:
 
     with ui.panel("area-head"):
         cats = _top_cats(info, 3)
-        badge = ui.growth_badge(ui.relative_growth(growth, cid), ready)
+        badge = ui.growth_badge(growth, cid, ready)
         st.markdown(
             f"<div class='sg-eyebrow'><span class='sg-swatch' style='background:"
             f"{colors.get(cid, ui.ACCENT)}'></span>Research area</div>"
@@ -107,6 +107,12 @@ def _detail(bundle, cid: int) -> None:
                                    marker=dict(color=colors.get(cid, ui.ACCENT))))
             ui.apply_chart_style(fig, height=300)
             st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+            st.caption(ui.growth_text(growth, cid))
+            trend = g.get("trend")
+            if trend and ui.growth_reliable(growth, cid):
+                lo, hi = trend["ci"]
+                st.caption(f"Monthly trend fit: {trend['annual_rate_ratio']:.2f}× per year relative "
+                           f"to CS (interval {lo:.2f}–{hi:.2f}, {trend['months']} months).")
         else:
             ui.panel_header("Categories")
             ui.note(f"<b>Not enough history for trends.</b> "

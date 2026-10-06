@@ -8,4 +8,4 @@ lightweight Streamlit application.
 See the SRS (Docs/ScholarGrid_SRS.md) for the full requirement mapping.
 """
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"

@@ -1,0 +1,4 @@
+{
+  "description": "Graded relevance judgments (0 = not relevant, 1 = partially relevant, 2 = relevant) for top results of benchmark queries. Generate a labelling sheet with `python -m scholargrid.judgments export`, fill in the grade column, then run `python -m scholargrid.judgments import <file.csv>`. Judged queries override the heuristic grades in validation.",
+  "judgments": {}
+}

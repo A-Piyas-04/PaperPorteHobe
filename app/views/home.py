@@ -1,11 +1,16 @@
 """Home / Search — the landing page and primary entry point."""
 from __future__ import annotations
 
+import io
+
+import pandas as pd
 import streamlit as st
 
 import ui
-from scholargrid.config import load_config
-from scholargrid.search import search as semantic_search
+
+_LIKE = "like:"
+_SORTS = {"Relevance": "relevance", "Newest": "newest", "Most cited": "most_cited",
+          "Citation velocity": "citation_velocity"}
 
 
 def _set_query(text: str) -> None:
@@ -24,7 +29,7 @@ def _open_in_explore(query: str, items: list) -> None:
 def render() -> None:
     bundle = ui.get_bundle()
     ui.ss("q", "")
-    query = st.session_state.get("q", "").strip()
+    query = st.session_state.get("q", "").strip()[: ui.max_query_chars()]
 
     if not query:
         _landing(bundle)
@@ -40,9 +45,9 @@ def _landing(bundle) -> None:
             "<div class='sg-eyebrow'>Research landscape explorer</div>"
             "<div class='sg-title'>Find the papers that matter.</div>"
             "<p class='sg-lead'>Describe a topic in plain words. We'll find the closest "
-            "recent arXiv papers and show where they sit in the field.</p>",
+            "arXiv papers and show where they sit in the field.</p>",
             unsafe_allow_html=True)
-        st.text_input("Search", key="q", label_visibility="collapsed",
+        st.text_input("Search", key="q", label_visibility="collapsed", max_chars=ui.max_query_chars(),
                       placeholder="e.g. efficient attention for long documents")
         st.markdown("<div style='height:.6rem'></div>", unsafe_allow_html=True)
         st.caption("Popular searches")
@@ -68,23 +73,87 @@ def _landing(bundle) -> None:
             ui.goto("areas")
 
 
+def _filters(bundle) -> tuple[tuple, str, float]:
+    df = bundle.df
+    with st.expander("Filters and sorting"):
+        c1, c2, c3 = st.columns([1.3, 1.6, 1])
+        lo, hi = df["date"].min().date(), df["date"].max().date()
+        dates = c1.date_input("Published between", value=(lo, hi), min_value=lo, max_value=hi,
+                              key="f_dates")
+        cats = df["primary_category"].value_counts().index.tolist()[:40]
+        chosen = c2.multiselect("Categories", cats, key="f_cats", placeholder="All categories")
+        min_cites = int(c3.number_input("Min. citations", min_value=0, value=0, step=1, key="f_cites"))
+        s1, s2 = st.columns([1, 1.4])
+        sort = _SORTS[s1.selectbox("Sort by", list(_SORTS), key="f_sort")]
+        boost = s2.toggle("Favour well-cited papers (age-adjusted)", key="f_boost")
+    d_from = d_to = None
+    if isinstance(dates, (list, tuple)) and len(dates) == 2:
+        if dates[0] != lo:
+            d_from = dates[0].isoformat()
+        if dates[1] != hi:
+            d_to = dates[1].isoformat()
+    filters = (d_from, d_to, tuple(chosen), min_cites, False)
+    active = d_from or d_to or chosen or min_cites
+    return (filters if active else ()), sort, (0.5 if boost else 0.0)
+
+
+def _similar(bundle, arxiv_id: str, top_k: int) -> dict:
+    df = bundle.df
+    hits = df.index[df["arxiv_id"] == arxiv_id]
+    if len(hits) == 0:
+        return {"results": [], "result_indices": [], "cluster_distribution": [], "mode": "similar"}
+    i = int(hits[0])
+    vec = bundle.embeddings[i].astype("float32")
+    idx, sims = bundle.index.search(vec[None, :], top_k + 1)
+    order = [(int(j), float(s)) for j, s in zip(idx[0], sims[0]) if int(j) != i][:top_k]
+    results = []
+    for rank, (j, s) in enumerate(order, 1):
+        r = df.iloc[j]
+        results.append({"rank": rank, "arxiv_id": r["arxiv_id"], "title": r["title"],
+                        "primary_category": r["primary_category"], "date": r["date"].strftime("%Y-%m-%d"),
+                        "cluster_id": int(bundle.labels[j]), "score": round(s, 4),
+                        "cited_by_count": int(r["cited_by_count"]), "matched_terms": []})
+    from collections import Counter
+
+    dist = Counter(r["cluster_id"] for r in results)
+    return {"query": f"papers like “{df.iloc[i]['title']}”", "results": results,
+            "result_indices": [j for j, _ in order], "mode": "similar", "degraded": False,
+            "cluster_distribution": [{"cluster_id": c, "count": n} for c, n in dist.most_common()]}
+
+
+def _bibtex(rows: list) -> str:
+    out = []
+    for r in rows:
+        key = "arxiv" + str(r["arxiv_id"]).replace(".", "_").replace("/", "_")
+        authors = " and ".join(a.strip() for a in str(r.get("authors", "")).split(";") if a.strip())
+        out.append(f"@misc{{{key},\n  title = {{{r['title']}}},\n  author = {{{authors}}},\n"
+                   f"  year = {{{str(r['date'])[:4]}}},\n  eprint = {{{r['arxiv_id']}}},\n"
+                   f"  archivePrefix = {{arXiv}},\n  primaryClass = {{{r['primary_category']}}},\n"
+                   f"  url = {{https://arxiv.org/abs/{r['arxiv_id']}}}\n}}")
+    return "\n\n".join(out) + "\n"
+
+
 def _results(bundle, query: str) -> None:
     with ui.panel("search"):
         s, c = st.columns([5, 1], vertical_alignment="center")
-        s.text_input("Search", key="q", label_visibility="collapsed",
+        s.text_input("Search", key="q", label_visibility="collapsed", max_chars=ui.max_query_chars(),
                      placeholder="Search a research topic…")
         c.button("Clear", use_container_width=True, on_click=_clear_query)
+        filters, sort, boost = _filters(bundle)
 
     with ui.panel("results"):
         head = st.empty()
         slot = st.empty()
         slot.markdown(ui.skeleton_cards(4), unsafe_allow_html=True)
 
-        top_k = int(load_config()["search"]["top_k"])
-        res = semantic_search(query, bundle.embedder, bundle.embeddings, bundle.df,
-                              bundle.labels, bundle.clusters_meta, top_k=top_k)
+        top_k = int(ui.get_config()["search"]["top_k"])
+        if query.startswith(_LIKE):
+            res = _similar(bundle, query[len(_LIKE):].strip(), top_k)
+        else:
+            res = ui.run_search(ui.bundle_version(), query, top_k, filters, sort, boost)
         clusters = bundle.clusters_meta
         n_areas = sum(1 for d in res["cluster_distribution"] if d["cluster_id"] != -1)
+        df = bundle.df
 
         with head.container():
             h, a = st.columns([4, 1.2], vertical_alignment="center")
@@ -92,7 +161,8 @@ def _results(bundle, query: str) -> None:
                 f"<div class='sg-ph' style='border:0;margin:0;padding:0'>"
                 f"<span class='sg-ph-t'>{len(res['results'])} papers</span>"
                 f"<span class='sg-ph-m'>across {n_areas} area{'s' if n_areas != 1 else ''}"
-                f"</span></div>", unsafe_allow_html=True)
+                f"{' · keyword search' if res.get('mode') == 'lexical' else ''}</span></div>",
+                unsafe_allow_html=True)
             items = [[int(i), round(float(r["score"]), 4)]
                      for i, r in zip(res["result_indices"], res["results"])]
             if a.button("See the graph", type="primary", use_container_width=True,
@@ -102,7 +172,11 @@ def _results(bundle, query: str) -> None:
                      for d in res["cluster_distribution"][:5]]
             st.markdown(ui.keyword_pills(pills), unsafe_allow_html=True)
 
-        df = bundle.df
+        if not res["results"]:
+            slot.empty()
+            ui.note("<b>No papers matched.</b> Try fewer filters or different words.")
+            return
+
         with slot.container():
             for i, (r, idx) in enumerate(zip(res["results"], res["result_indices"])):
                 ui.paper_card(
@@ -110,4 +184,18 @@ def _results(bundle, query: str) -> None:
                     date=r["date"], area=ui.area_name(clusters, r["cluster_id"]),
                     score=r["score"],
                     snippet=ui.abstract_snippet(df.iloc[int(idx)].get("abstract")),
-                    delay=i)
+                    terms=r.get("matched_terms", []), delay=i)
+                st.button("More like this", key=f"like_{r['arxiv_id']}_{i}", type="tertiary",
+                          on_click=_set_query, args=(f"{_LIKE}{r['arxiv_id']}",))
+
+        export = pd.DataFrame([{**r, "authors": df.iloc[int(idx)]["authors"]}
+                               for r, idx in zip(res["results"], res["result_indices"])])
+        buf = io.StringIO()
+        export[["rank", "arxiv_id", "title", "authors", "primary_category", "date",
+                "cited_by_count", "score"]].to_csv(buf, index=False)
+        e1, e2, _ = st.columns([1, 1, 3])
+        e1.download_button("Export CSV", buf.getvalue(), file_name="scholargrid_results.csv",
+                           mime="text/csv", use_container_width=True)
+        e2.download_button("Export BibTeX", _bibtex(export.to_dict("records")),
+                           file_name="scholargrid_results.bib", mime="application/x-bibtex",
+                           use_container_width=True)

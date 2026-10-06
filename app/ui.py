@@ -226,6 +226,8 @@ _CSS = """
   .sg-chip.area { background: var(--soft); color: #1f4fb8; }
   .sg-chip.cites { background: #fdf3e6; color: #8a4b08; }
   .sg-score { margin-left: auto; color: var(--muted); font-size: .8125rem; font-weight: 650; }
+  .sg-card mark { background: #fff1c2; color: inherit; padding: 0 .1rem; border-radius: 3px; }
+  a:focus-visible, button:focus-visible { outline: 3px solid #9ab8f5 !important; outline-offset: 2px; }
 
   /* ---- Area card (keyed container) ----------------------------------- */
   div[class*="st-key-card-"] {
@@ -323,8 +325,19 @@ def inject_css() -> None:
 # Data access
 # ---------------------------------------------------------------------------
 @st.cache_resource(show_spinner=False)
+def get_config():
+    return load_config()
+
+
+@st.cache_resource(show_spinner=False)
 def get_bundle():
-    return load_bundle(load_config())
+    bundle = load_bundle(get_config())
+    if get_config()["app"]["pre_warm"] and bundle.embedder is not None:
+        try:
+            bundle.embedder.encode_query("warm up")
+        except Exception:
+            pass
+    return bundle
 
 
 def ensure_loaded() -> None:
@@ -336,6 +349,69 @@ def ensure_loaded() -> None:
     get_bundle()
     st.session_state["_loaded"] = True
     splash.empty()
+
+
+def bundle_version() -> str:
+    return str(get_bundle().meta.get("generated_at", "v1"))
+
+
+@st.cache_data(show_spinner=False, max_entries=512)
+def run_search(version: str, query: str, top_k: int, filters: tuple = (), sort: str = "relevance",
+               citation_weight: float = 0.0) -> dict:
+    """Cached search keyed by bundle version + query + filters."""
+    from scholargrid.search import SearchFilters, search
+
+    b = get_bundle()
+    f = SearchFilters(*filters) if filters else None
+    return search(query, b.embedder, b.embeddings, b.df, b.labels, b.clusters_meta, top_k=top_k,
+                  bm25=b.bm25, index=b.index, cfg=get_config(), filters=f, sort=sort,
+                  citation_weight=citation_weight)
+
+
+def max_query_chars() -> int:
+    return int(get_config()["search"]["max_query_chars"])
+
+
+# ---------------------------------------------------------------------------
+# Global notices
+# ---------------------------------------------------------------------------
+def data_age_days(bundle) -> int | None:
+    try:
+        ts = pd.Timestamp(bundle.meta.get("generated_at"))
+    except (TypeError, ValueError):
+        return None
+    if pd.isna(ts):
+        return None
+    if ts.tzinfo is not None:
+        ts = ts.tz_convert(None)
+    return int((pd.Timestamp.now(tz="UTC").tz_convert(None) - ts).days)
+
+
+def global_notices(bundle) -> None:
+    """Staleness, degraded search and synthetic-data banners."""
+    age = data_age_days(bundle)
+    limit = int(get_config()["monitoring"]["stale_after_days"])
+    if age is not None and age > limit:
+        note(f"<b>This data may be out of date.</b> The current release was built {age} days ago "
+             f"(refresh expected every {max(1, limit // 2)} days).")
+    if bundle.embedder is None:
+        note("<b>Semantic search is temporarily unavailable.</b> Results use keyword matching "
+             "(BM25) until the embedding model loads again.")
+    snap = bundle.meta.get("snapshot", {})
+    if snap.get("source") == "synthetic":
+        note("<b>Demo data.</b> This landscape is built from synthetic papers, not real arXiv records.")
+
+
+def attribution_footer() -> None:
+    st.markdown(
+        "<div style='margin-top:2.5rem;padding-top:1rem;border-top:1px solid #e2e5ea;"
+        "color:#566070;font-size:.8125rem;line-height:1.6'>"
+        "Thank you to arXiv for use of its open access interoperability. Paper metadata from "
+        "<a href='https://arxiv.org' target='_blank' rel='noopener'>arXiv</a>; abstracts remain "
+        "under each paper's own licence, follow the links to read them on arXiv. Citation data from "
+        "<a href='https://openalex.org' target='_blank' rel='noopener'>OpenAlex</a> (CC0). "
+        "ScholarGrid is an exploration tool, not a judgment of research value."
+        "</div>", unsafe_allow_html=True)
 
 
 def ss(key, default):
@@ -386,11 +462,34 @@ def growth_ready(bundle) -> bool:
     return history_days(bundle) >= 2 * int(g["default_window"]) * 30.4
 
 
-def relative_growth(growth: dict, cid):
+def growth_window(growth: dict, cid) -> dict:
     g = growth_of(growth, cid)
     if not g:
-        return None
-    return g["windows"].get(str(growth["default_window"]), {}).get("relative_growth")
+        return {}
+    return g["windows"].get(str(growth["default_window"]), {}) or {}
+
+
+def growth_reliable(growth: dict, cid) -> bool:
+    """True only when the cluster passes every gate (history, minimum counts,
+    confidence interval, stability). Bundles built before v2 never qualify."""
+    g = growth_of(growth, cid)
+    return bool(g and g.get("reliable"))
+
+
+def relative_growth(growth: dict, cid):
+    return growth_window(growth, cid).get("relative_growth")
+
+
+def growth_text(growth: dict, cid) -> str:
+    """Plain-language growth summary with window, counts and interval."""
+    w = growth_window(growth, cid)
+    months = growth.get("default_window")
+    counts = f"{w.get('recent_count', 0)} papers in the last {months} months vs {w.get('previous_count', 0)} before"
+    if not growth_reliable(growth, cid) or w.get("relative_growth") is None:
+        return f"{counts}. Trend not reliable yet."
+    lo, hi = (w.get("ci") or [None, None])[:2]
+    ci = f" ({int(round(growth['gate']['ci_level'] * 100))}% CI {lo:.2f}–{hi:.2f})" if lo is not None else ""
+    return f"{w['relative_growth']:.2f}× the CS-wide rate{ci}; {counts}."
 
 
 def fmt_date(d) -> str:
@@ -458,12 +557,19 @@ def stat_tiles(tiles: Sequence[tuple]) -> None:
     st.markdown(f"<div class='sg-tiles'>{cells}</div>", unsafe_allow_html=True)
 
 
-def growth_badge(rel, ready: bool) -> str:
-    if not ready or rel is None:
+def growth_badge(growth: dict, cid, ready: bool) -> str:
+    """Reliability-aware badge: a direction only when the interval excludes 1."""
+    if not ready:
         return ""
-    if rel >= 1.0:
-        return f"<span class='sg-badge sg-up'>{rel:.1f}× faster</span>"
-    return f"<span class='sg-badge sg-flat'>{rel:.1f}× slower</span>"
+    if not growth_reliable(growth, cid):
+        return "<span class='sg-badge sg-flat'>trend not reliable</span>"
+    w = growth_window(growth, cid)
+    direction, rel = w.get("direction"), w.get("relative_growth")
+    if direction == "growing":
+        return f"<span class='sg-badge sg-up'>growing · {rel:.1f}×</span>"
+    if direction == "declining":
+        return f"<span class='sg-badge sg-flat'>slowing · {rel:.1f}×</span>"
+    return "<span class='sg-badge sg-flat'>no clear change</span>"
 
 
 def keyword_pills(words: Iterable[str]) -> str:
@@ -486,9 +592,19 @@ def author_line(authors: str, max_names: int = 3) -> str:
     return ", ".join(names[:max_names]) + more
 
 
+def _highlight(text: str, terms: Sequence[str]) -> str:
+    import re
+
+    escaped = html.escape(text)
+    if not terms:
+        return escaped
+    pattern = "|".join(re.escape(html.escape(t)) for t in sorted(terms, key=len, reverse=True))
+    return re.sub(rf"(?i)\b({pattern})\b", r"<mark>\1</mark>", escaped)
+
+
 def paper_card(title: str, arxiv_id: str, *, category: str | None = None,
                date=None, area: str | None = None, score: float | None = None,
-               snippet: str | None = None, delay: int = 0) -> None:
+               snippet: str | None = None, delay: int = 0, terms: Sequence[str] = ()) -> None:
     index = _paper_index(get_bundle().meta.get("generated_at", "v1"))
     authors, cites = index.get(str(arxiv_id), ("", 0))
     chips = ""
@@ -510,7 +626,7 @@ def paper_card(title: str, arxiv_id: str, *, category: str | None = None,
         + f"<div class='m'>{chips}</div>"
     )
     if snippet:
-        body += f"<div class='s'>{html.escape(snippet)}</div>"
+        body += f"<div class='s'>{_highlight(snippet, terms)}</div>"
     st.markdown(body + "</div>", unsafe_allow_html=True)
 
 

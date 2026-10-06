@@ -1,0 +1,8 @@
+# ScholarGrid — weekly incremental refresh.
+# Harvests new papers by date with OAI-PMH, merges them into the stored raw
+# layer, then rebuilds the bundle (embeddings are reused for unchanged papers).
+
+extends: production.yaml
+
+data:
+  source: oai_pmh

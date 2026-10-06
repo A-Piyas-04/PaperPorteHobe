@@ -6,9 +6,12 @@ is done offline by the pipeline.
 
 This module is a thin shell: it sets up the page, injects the global
 stylesheet, loads the artifact bundle once, and wires the pages together with a
-custom top navigation bar. Each page lives in ``app/views/``.
+custom top navigation bar. Each page lives in ``app/views/``. Errors inside a
+page are reported (Sentry when configured) and shown as a friendly message,
+never as a raw traceback.
 
 Run:  streamlit run app/streamlit_app.py
+Health check: Streamlit serves ``/_stcore/health``.
 """
 from __future__ import annotations
 
@@ -21,7 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import ui  # noqa: E402  (app/ui.py)
 from scholargrid.artifacts import bundle_exists  # noqa: E402
-from scholargrid.config import load_config  # noqa: E402
+from scholargrid.monitoring import capture_exception, init_error_tracking  # noqa: E402
 
 st.set_page_config(page_title="ScholarGrid", page_icon="🔭", layout="wide")
 
@@ -46,9 +49,16 @@ def _build_pages() -> dict:
     }
 
 
+def _friendly_error(exc: Exception) -> None:
+    capture_exception(exc)
+    ui.note("<b>Something went wrong on this page.</b> The error has been logged. "
+            "Try again, or open another page.")
+
+
 def main() -> None:
+    init_error_tracking("app")
     ui.inject_css()
-    cfg = load_config()
+    cfg = ui.get_config()
 
     # First run: no artifacts yet -> standalone onboarding, no nav.
     if not bundle_exists(cfg):
@@ -56,14 +66,23 @@ def main() -> None:
         onboarding.render()
         return
 
-    ui.ensure_loaded()
+    try:
+        ui.ensure_loaded()
+    except Exception as exc:
+        _friendly_error(exc)
+        return
 
     pages = _build_pages()
     st.session_state["_pages"] = pages
 
     nav = st.navigation(list(pages.values()), position="hidden")
     ui.render_top_nav(pages)
-    nav.run()
+    ui.global_notices(ui.get_bundle())
+    try:
+        nav.run()
+    except Exception as exc:
+        _friendly_error(exc)
+    ui.attribution_footer()
 
 
 if __name__ == "__main__":

@@ -7,6 +7,8 @@ forcing every paper into a cluster.
 """
 from __future__ import annotations
 
+from typing import Dict
+
 import numpy as np
 
 from .config import Config
@@ -15,18 +17,28 @@ from .utils import get_logger
 log = get_logger("cluster")
 
 
-def cluster(reduced: np.ndarray, cfg: Config) -> tuple[np.ndarray, str]:
-    backend = cfg.resolve_cluster_backend()
+def min_cluster_size(cfg: Config, n: int) -> int:
+    """Configured size, or ``min_cluster_fraction`` of the corpus when ``auto``."""
+    c = cfg["cluster"]
+    if c["min_cluster_size"] == "auto":
+        return max(10, int(round(n * float(c["min_cluster_fraction"]))))
+    return int(c["min_cluster_size"])
+
+
+def cluster(reduced: np.ndarray, cfg: Config, backend: str | None = None) -> tuple[np.ndarray, str]:
+    backend = backend or cfg.resolve_cluster_backend()
     min_clusters = int(cfg["cluster"].get("fallback_min_clusters", 4))
     if backend == "hdbscan":
         labels = _hdbscan(reduced, cfg)
+    elif backend == "kmeans":
+        labels = _kmeans(reduced, cfg)
     else:
         labels = _dbscan(reduced, cfg)
     n = len({int(c) for c in labels if c != -1})
     log.info("%s produced %d clusters, %d noise points (%.1f%%).",
              backend, n, int((labels == -1).sum()),
              100.0 * int((labels == -1).sum()) / max(1, len(labels)))
-    if n < min_clusters:
+    if n < min_clusters and backend != "kmeans":
         log.info("%s yielded %d clusters (<%d); using KMeans fallback.",
                  backend, n, min_clusters)
         labels = _kmeans(reduced, cfg)
@@ -45,7 +57,7 @@ def _kmeans(reduced: np.ndarray, cfg: Config) -> np.ndarray:
     from sklearn.metrics import silhouette_score
 
     lo, hi = cfg["cluster"]["kmeans_k_range"]
-    hi = min(int(hi), max(2, len(reduced) // int(cfg["cluster"]["min_cluster_size"])))
+    hi = min(int(hi), max(2, len(reduced) // min_cluster_size(cfg, len(reduced))))
     lo = min(int(lo), hi)
     best = None
     for k in range(lo, hi + 1):
@@ -62,7 +74,7 @@ def _kmeans(reduced: np.ndarray, cfg: Config) -> np.ndarray:
     d = np.linalg.norm(reduced - km.cluster_centers_[labels], axis=1)
     thr = np.percentile(d, float(cfg["cluster"]["noise_percentile"]))
     labels[d > thr] = -1
-    labels = _repack(labels, int(cfg["cluster"]["min_cluster_size"]))
+    labels = _repack(labels, min_cluster_size(cfg, len(reduced)))
     log.info("KMeans selected k=%d (silhouette=%.3f).", k, best[0])
     return labels
 
@@ -72,7 +84,7 @@ def _hdbscan(reduced: np.ndarray, cfg: Config) -> np.ndarray:
 
     method = str(cfg["cluster"].get("hdbscan_cluster_selection_method", "leaf"))
     clusterer = hdbscan.HDBSCAN(
-        min_cluster_size=int(cfg["cluster"]["min_cluster_size"]),
+        min_cluster_size=min_cluster_size(cfg, len(reduced)),
         min_samples=int(cfg["cluster"]["min_samples"]),
         metric="euclidean",
         cluster_selection_method=method,
@@ -85,7 +97,7 @@ def _dbscan(reduced: np.ndarray, cfg: Config) -> np.ndarray:
     from sklearn.neighbors import NearestNeighbors
 
     min_samples = int(cfg["cluster"]["min_samples"])
-    min_size = int(cfg["cluster"]["min_cluster_size"])
+    min_size = min_cluster_size(cfg, len(reduced))
 
     # k-distance graph: each point's distance to its min_samples-th neighbour.
     k = min(min_samples, len(reduced) - 1)
@@ -147,3 +159,41 @@ def _repack(labels: np.ndarray, min_size: int) -> np.ndarray:
     remaining = sorted({int(lb) for lb in labels if lb != -1})
     remap = {old: new for new, old in enumerate(remaining)}
     return np.array([remap.get(int(lb), -1) for lb in labels])
+
+
+def cluster_stability(reduced: np.ndarray, labels: np.ndarray, cfg: Config,
+                      backend: str, frac: float = 0.8) -> Dict:
+    """Re-cluster random subsamples (one per ``stability_seeds`` entry) and
+    compare with the full-data labels on the shared papers.
+
+    Reports the mean Adjusted Rand Index and, per cluster, the share of runs in
+    which it survives (some new cluster overlaps it with Jaccard >= 0.5).
+    """
+    from sklearn.metrics import adjusted_rand_score
+
+    seeds = list(cfg["cluster"]["stability_seeds"])
+    cluster_ids = sorted({int(c) for c in labels if c != -1})
+    if not seeds or len(reduced) < 50 or not cluster_ids:
+        return {"mean_ari": None, "runs": 0, "per_cluster_survival": {}, "unstable_clusters": []}
+    aris, survived = [], {cid: 0 for cid in cluster_ids}
+    for seed in seeds:
+        rng = np.random.default_rng(seed)
+        sub = np.sort(rng.choice(len(reduced), size=int(frac * len(reduced)), replace=False))
+        new, _ = cluster(reduced[sub], cfg, backend=backend)
+        old = labels[sub]
+        aris.append(float(adjusted_rand_score(old, new)))
+        new_sets = {int(c): set(np.where(new == c)[0]) for c in set(new.tolist()) if c != -1}
+        for cid in cluster_ids:
+            members = set(np.where(old == cid)[0])
+            if not members:
+                continue
+            best = max((len(members & s) / len(members | s) for s in new_sets.values()), default=0.0)
+            if best >= 0.5:
+                survived[cid] += 1
+    survival = {cid: round(n / len(seeds), 3) for cid, n in survived.items()}
+    return {
+        "mean_ari": round(float(np.mean(aris)), 4),
+        "runs": len(seeds),
+        "per_cluster_survival": survival,
+        "unstable_clusters": [cid for cid, s in survival.items() if s < 0.5],
+    }

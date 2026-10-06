@@ -1,0 +1,47 @@
+# ScholarGrid — production configuration.
+# Inherits everything from config.yaml and overrides only what differs.
+# Run with:  python -m scholargrid.pipeline --config configs/production.yaml
+
+extends: config.yaml
+environment: production
+
+data:
+  source: kaggle                 # backfill; weekly refreshes use oai_pmh (see refresh.yaml)
+  profile: standard
+  date_start: "2021-01-01"
+  date_end: auto
+  categories: all_cs
+  allow_synthetic_fallback: false
+  sampling: stratified
+
+storage:
+  backend: duckdb
+
+quality:
+  fail_on_error: true
+  min_span_months: 24
+  min_papers_per_month: 50
+  max_category_share: 0.35
+
+embedding:
+  backend: minilm
+  dtype: float16
+  device: auto
+
+index:
+  backend: auto
+
+cluster:
+  min_cluster_size: auto
+  min_cluster_fraction: 0.0008
+
+sparse:
+  min_corpus_size: 20000
+  robustness_seeds: [0, 1, 2, 3, 4]
+  min_robustness: 0.7
+
+validation:
+  enforce_gates: true
+
+monitoring:
+  json_logs: true
