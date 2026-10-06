@@ -14,7 +14,7 @@ dependencies = [
     "scikit-learn>=1.5,<2",
     "scipy>=1.13,<2",
     "pyyaml>=6.0",
-    "requests>=2.32",
+    "requests>=2.33",
     "pydantic>=2.7,<3",
     "pyarrow>=16",
     "joblib>=1.4",
@@ -28,7 +28,7 @@ ml = [
     "faiss-cpu>=1.8",
     "duckdb>=1.0",
 ]
-app = ["streamlit>=1.46,<2", "plotly>=6.0"]
+app = ["streamlit>=1.54,<2", "plotly>=6.0", "pillow>=12.3"]
 monitoring = ["sentry-sdk>=2.0"]
 dev = [
     "pytest>=8",
