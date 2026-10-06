@@ -168,7 +168,8 @@ class _Cache:
             self.data = {a: {"at": at, "rec": json.loads(r) if r else None}
                          for a, at, r in zip(t["arxiv_id"], t["fetched_at"], t["payload"])}
         elif os.path.exists(self.legacy):
-            self.data = load_json(self.legacy)
+            # v1 entries lack openalex_id/venue_type/topic, so all of them are refetched once.
+            self.data = {a: {"at": "", "rec": (v or {}).get("rec")} for a, v in load_json(self.legacy).items()}
             log.info("Migrating %d OpenAlex cache entries from %s.", len(self.data), self.legacy)
 
     def save(self) -> None:

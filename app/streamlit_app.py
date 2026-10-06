@@ -20,7 +20,9 @@ import sys
 
 import streamlit as st
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_APP_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(_APP_DIR))
+sys.path.insert(0, _APP_DIR)  # app.py (Spaces shim) runs this file with the repo root as cwd
 
 import ui  # noqa: E402  (app/ui.py)
 from scholargrid.artifacts import bundle_exists  # noqa: E402

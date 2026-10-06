@@ -85,6 +85,21 @@ def test_refresh_schedule_by_age(cfg):
     assert is_stale(None, pd.Timestamp("2020-01-01"), today, e)
 
 
+def test_legacy_openalex_cache_is_refetched(cfg):
+    import json
+    import os
+
+    from scholargrid.enrich import _Cache
+
+    os.makedirs(cfg.raw_dir, exist_ok=True)
+    legacy = {"2401.00001": {"at": date.today().isoformat(), "rec": {"cited_by_count": 3, "references": []}}}
+    with open(os.path.join(cfg.raw_dir, "openalex.json"), "w", encoding="utf-8") as fh:
+        json.dump(legacy, fh)
+    entry = _Cache(cfg).data["2401.00001"]
+    assert entry["rec"]["cited_by_count"] == 3
+    assert is_stale(entry, pd.Timestamp("2020-01-01"), date.today(), cfg["enrich"])
+
+
 def test_citation_velocity_and_match_stats():
     h = pd.DataFrame({"arxiv_id": ["a", "a", "b"], "snapshot_date": ["2026-01-01", "2026-01-31", "2026-01-31"],
                       "cited_by_count": [10, 40, 3]})
