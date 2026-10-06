@@ -16,11 +16,7 @@ _NON_WORD_RE = re.compile(r"[^\w\s]")
 # Frequent English function words. A real English abstract is ~25-45% these;
 # other languages score near zero, so a low threshold is a cheap, dependency-
 # free language filter.
-_EN_STOPWORDS = frozenset("""
-a an the of and or in on for to with by from as at is are was were be been this that
-these those we our it its which can using based than into over under between such via
-not also show results method methods propose proposed approach paper model models
-""".split())
+_EN_STOPWORDS = frozenset(["a", "an", "the", "of", "and", "or", "in", "on", "for", "to", "with", "by", "from", "as", "at", "is", "are", "was", "were", "be", "been", "this", "that", "these", "those", "we", "our", "it", "its", "which", "can", "using", "based", "than", "into", "over", "under", "between", "such", "via", "not", "also", "show", "results", "method", "methods", "propose", "proposed", "approach", "paper", "model", "models"])
 
 
 def base_arxiv_id(raw_id: str) -> str:

@@ -12,6 +12,7 @@ spotlights or ring effects.
 """
 from __future__ import annotations
 
+import contextlib
 import html
 import os
 import sys
@@ -333,10 +334,8 @@ def get_config():
 def get_bundle():
     bundle = load_bundle(get_config())
     if get_config()["app"]["pre_warm"] and bundle.embedder is not None:
-        try:
+        with contextlib.suppress(Exception):
             bundle.embedder.encode_query("warm up")
-        except Exception:
-            pass
     return bundle
 
 

@@ -37,7 +37,7 @@ class BM25Index:
         self.idf = np.log(1.0 + (n_docs - df + 0.5) / (df + 0.5)).astype(np.float32)
 
     @classmethod
-    def build(cls, texts: List[str], max_features: Optional[int] = 200000) -> "BM25Index":
+    def build(cls, texts: List[str], max_features: Optional[int] = 200000) -> BM25Index:
         from sklearn.feature_extraction.text import CountVectorizer
 
         vec = CountVectorizer(tokenizer=tokenize, lowercase=False, token_pattern=None,
@@ -78,7 +78,7 @@ class BM25Index:
                   os.path.join(directory, "bm25_meta.json"))
 
     @classmethod
-    def load(cls, directory: str) -> Optional["BM25Index"]:
+    def load(cls, directory: str) -> Optional[BM25Index]:
         tf_path = os.path.join(directory, "bm25_tf.npz")
         meta_path = os.path.join(directory, "bm25_meta.json")
         if not (os.path.exists(tf_path) and os.path.exists(meta_path)):

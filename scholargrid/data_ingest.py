@@ -28,7 +28,7 @@ import time
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from typing import Dict, Iterator, List, Optional
 
 import numpy as np
@@ -238,7 +238,7 @@ def _ingest_kaggle(cfg: Config, store, chunk_rows: int = 50000) -> None:
     st = os.stat(path)
     save_json({"size": st.st_size, "mtime": int(st.st_mtime), "date_start": d["date_start"],
                "date_end": d["date_end"], "categories": d["categories"],
-               "ingested": total, "at": datetime.now(timezone.utc).isoformat()}, state_path)
+               "ingested": total, "at": datetime.now(UTC).isoformat()}, state_path)
     log.info("Kaggle ingest stored %d papers.", total)
 
 
@@ -249,7 +249,7 @@ def iter_kaggle(path: str, cfg: Config, chunk_rows: int = 50000) -> Iterator[pd.
     start, end = d["date_start"], d["date_end"]
     rows: List[Dict] = []
     scanned = 0
-    with open(path, "r", encoding="utf-8") as fh:
+    with open(path, encoding="utf-8") as fh:
         for line in fh:
             scanned += 1
             if prefix not in line and whitelist is None:
@@ -524,5 +524,5 @@ def snapshot_info(df: pd.DataFrame, cfg: Config) -> Dict:
         "n_months": int(df["year_month"].nunique()) if len(df) else 0,
         "n_categories": int(df["primary_category"].nunique()) if len(df) else 0,
         "category_counts": df["primary_category"].value_counts().head(20).to_dict(),
-        "harvested_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "harvested_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }

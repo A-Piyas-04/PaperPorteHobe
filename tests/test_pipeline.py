@@ -3,8 +3,8 @@ import json
 import os
 
 import pytest
-
 from conftest import make_config
+
 from scholargrid.artifacts import load_bundle
 from scholargrid.pipeline import main, run
 from scholargrid.release import list_releases
@@ -41,7 +41,8 @@ def test_validation_report_and_release(built):
     assert os.path.exists(os.path.join(cfg.reports_dir, "validation_report.md"))
     rel = list_releases(cfg)
     assert len(rel) == 1
-    manifest = json.load(open(os.path.join(cfg.releases_dir, rel[0], "manifest.json")))
+    with open(os.path.join(cfg.releases_dir, rel[0], "manifest.json"), encoding="utf-8") as fh:
+        manifest = json.load(fh)
     assert manifest["corpus"]["n_papers"] > 0 and manifest["libraries"]["numpy"]
 
 

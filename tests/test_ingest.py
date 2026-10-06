@@ -3,10 +3,16 @@ from datetime import date
 
 import pandas as pd
 import pytest
-
 from conftest import make_config
-from scholargrid.data_ingest import (IngestError, build_corpus, clean_records, iter_kaggle,
-                                     parse_atom_entry, sample_corpus)
+
+from scholargrid.data_ingest import (
+    IngestError,
+    build_corpus,
+    clean_records,
+    iter_kaggle,
+    parse_atom_entry,
+    sample_corpus,
+)
 from scholargrid.oai_pmh import harvest, harvest_range, parse_page
 
 ABSTRACT = ("We propose a method for learning representations of graphs and show that it improves "

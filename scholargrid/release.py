@@ -15,7 +15,7 @@ import importlib.metadata
 import os
 import platform
 import shutil
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Dict, List, Optional
 
 import pandas as pd
@@ -56,7 +56,7 @@ def current_release(cfg: Config) -> Optional[str]:
     path = os.path.join(cfg.releases_dir, CURRENT_FILE)
     if not os.path.exists(path):
         return None
-    with open(path, "r", encoding="utf-8") as fh:
+    with open(path, encoding="utf-8") as fh:
         rid = fh.read().strip()
     return rid or None
 
@@ -76,7 +76,7 @@ def resolve_bundle_dir(cfg: Config) -> str:
 
 
 def _new_id(cfg: Config) -> str:
-    base = datetime.now(timezone.utc).strftime("%Y.%m.%d")
+    base = datetime.now(UTC).strftime("%Y.%m.%d")
     existing = set(list_releases(cfg))
     if base not in existing:
         return base
@@ -99,7 +99,7 @@ def build_manifest(cfg: Config, release_id: str, meta: Dict, report: Dict) -> Di
     snap = meta.get("snapshot", {})
     return {
         "release": release_id,
-        "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "created_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "environment": cfg["environment"],
         "config_path": _rel(cfg.path),
         "config_hash": cfg.config_hash(),

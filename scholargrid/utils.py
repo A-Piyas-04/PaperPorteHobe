@@ -90,7 +90,7 @@ def save_json(obj: Any, path: str) -> None:
 
 
 def load_json(path: str) -> Any:
-    with open(path, "r", encoding="utf-8") as fh:
+    with open(path, encoding="utf-8") as fh:
         return json.load(fh)
 
 

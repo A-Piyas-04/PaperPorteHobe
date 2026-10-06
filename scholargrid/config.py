@@ -177,7 +177,7 @@ def _read_yaml(path: str, seen: Optional[set] = None) -> Dict[str, Any]:
     if real in seen:
         raise ConfigError(f"Circular 'extends' in {path}")
     seen.add(real)
-    with open(path, "r", encoding="utf-8") as fh:
+    with open(path, encoding="utf-8") as fh:
         raw = yaml.safe_load(fh) or {}
     parent = raw.pop("extends", None)
     if parent:

@@ -1,0 +1,27 @@
+# Offline regression config for CI: synthetic corpus, scikit-learn backends.
+extends: config.yaml
+
+data:
+  source: synthetic
+  profile: custom
+  max_papers: 3000
+  date_start: "2022-01-01"
+  date_end: "2025-12-31"
+
+enrich:
+  openalex: false
+
+embedding:
+  backend: tfidf
+
+reduce:
+  backend: pca
+
+landscape:
+  backend: pca
+
+cluster:
+  backend: kmeans
+
+sparse:
+  min_corpus_size: 1000

@@ -17,7 +17,7 @@ from __future__ import annotations
 import argparse
 import os
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -176,7 +176,7 @@ def stage_analyze(ctx: Context) -> None:
         info.update(backend=reduce_backend)
     with stage_timer("cluster", t) as info:
         labels, cluster_backend = cluster(reduced, cfg)
-        match = {"report": {}}
+        match: Dict[str, Any] = {"report": {}}
         if cfg["cluster"]["match_previous"]:
             match = match_clusters(df["arxiv_id"], labels, embeddings, _previous_assignments(cfg),
                                    float(cfg["cluster"]["match_min_score"]))
@@ -219,7 +219,7 @@ def stage_analyze(ctx: Context) -> None:
     meta = {
         "pipeline_version": cfg["pipeline_version"],
         "scholargrid_version": __version__,
-        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "environment": cfg["environment"],
         "config_hash": cfg.config_hash(),
         "seed": cfg["seed"],

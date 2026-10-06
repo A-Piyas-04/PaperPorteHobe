@@ -21,7 +21,7 @@ second, window-free estimate. Absolute counts are always reported (FR-14).
 """
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -169,12 +169,13 @@ def compute_growth(df: pd.DataFrame, labels: np.ndarray, cfg: Config,
     for cid in cluster_ids:
         mask = labels == cid
         cdates, cw = dates[mask], weights[mask]
-        per_window = {}
+        per_window: Dict[str, Dict[str, Any]] = {}
         for w in windows:
             c = window_counts(cdates, ref, w, cw)
             gate = bool(sufficient[w]) and c["recent"] >= min_n and c["previous"] >= min_n
             raw = c["recent_w"] / c["previous_w"] if c["previous_w"] > 0 else None
-            rel = (raw / corpus_raw[w]) if (gate and raw is not None and corpus_raw[w]) else None
+            base = corpus_raw[w]
+            rel = (raw / base) if (gate and raw is not None and base) else None
             ci = (bootstrap_ci(c["recent_w"], c["previous_w"], corpus[w]["recent_w"],
                                corpus[w]["previous_w"], int(g["bootstrap_samples"]),
                                float(g["ci_level"]), rng) if rel is not None else None)

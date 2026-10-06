@@ -50,7 +50,7 @@ class NeighborIndex:
         self._ann = ann
 
     @classmethod
-    def build(cls, vectors: np.ndarray, cfg: Config) -> "NeighborIndex":
+    def build(cls, vectors: np.ndarray, cfg: Config) -> NeighborIndex:
         backend = cfg.resolve_index_backend(len(vectors))
         if backend == "exact":
             return cls("exact", vectors, cfg)
@@ -103,14 +103,14 @@ class NeighborIndex:
         faiss.write_index(self._ann, os.path.join(directory, INDEX_FILE))
 
     @classmethod
-    def load(cls, directory: str, vectors: np.ndarray, cfg: Config) -> "NeighborIndex":
+    def load(cls, directory: str, vectors: np.ndarray, cfg: Config) -> NeighborIndex:
         path = os.path.join(directory, INDEX_FILE)
         if os.path.exists(path):
             try:
                 import faiss  # type: ignore
 
                 ann = faiss.read_index(path)
-                ann.hnsw.efSearch = int(cfg["index"]["ef_search"])
+                ann.hnsw.efSearch = int(cfg["index"]["ef_search"])  # type: ignore[attr-defined]
                 return cls("faiss_hnsw", vectors, cfg, ann)
             except Exception as exc:  # pragma: no cover - faiss missing at runtime
                 log.warning("Could not load ANN index (%s); using exact search.", exc)

@@ -19,7 +19,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -57,9 +57,9 @@ class Embedder:
         ecfg = cfg["embedding"]
         self.model_name: str = ecfg["model_name"]
         self.revision: Optional[str] = ecfg.get("model_revision")
-        self._model = None          # minilm
-        self._vectorizer = None     # tfidf
-        self._svd = None            # tfidf
+        self._model: Any = None          # minilm
+        self._vectorizer: Any = None     # tfidf
+        self._svd: Any = None            # tfidf
         self.dim: int | None = None
 
     @property
@@ -144,7 +144,7 @@ class Embedder:
                         os.path.join(directory, "tfidf.joblib"), compress=3)
 
     @classmethod
-    def load(cls, directory: str, cfg: Config, lazy: bool = False) -> "Embedder":
+    def load(cls, directory: str, cfg: Config, lazy: bool = False) -> Embedder:
         meta_json = os.path.join(directory, "embedder_meta.json")
         if os.path.exists(meta_json):
             meta = load_json(meta_json)

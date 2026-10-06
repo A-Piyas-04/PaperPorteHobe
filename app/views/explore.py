@@ -12,9 +12,9 @@ from __future__ import annotations
 
 import numpy as np
 import streamlit as st
+from components.explorer import explorer, is_built
 
 import ui
-from components.explorer import explorer, is_built
 
 _ABSTRACT_CHARS = 900
 _PAGE_CSS = """

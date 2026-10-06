@@ -59,15 +59,14 @@ def _kmeans(reduced: np.ndarray, cfg: Config) -> np.ndarray:
     lo, hi = cfg["cluster"]["kmeans_k_range"]
     hi = min(int(hi), max(2, len(reduced) // min_cluster_size(cfg, len(reduced))))
     lo = min(int(lo), hi)
-    best = None
-    for k in range(lo, hi + 1):
+    best: tuple | None = None
+    for k in range(max(2, lo), max(2, hi) + 1):
         km = KMeans(n_clusters=k, random_state=cfg["seed"], n_init=10).fit(reduced)
-        if k == 1:
-            continue
         score = silhouette_score(reduced, km.labels_, sample_size=min(2000, len(reduced)),
                                  random_state=cfg["seed"])
         if best is None or score > best[0]:
             best = (score, k, km)
+    assert best is not None
     _, k, km = best
     labels = km.labels_.astype(int).copy()
     # Mark far-from-centroid points as noise.

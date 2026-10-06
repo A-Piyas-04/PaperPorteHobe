@@ -1,5 +1,4 @@
-from scholargrid.text import (arxiv_version, base_arxiv_id, has_category, is_english,
-                              normalize_text, title_key)
+from scholargrid.text import arxiv_version, base_arxiv_id, has_category, is_english, normalize_text, title_key
 
 
 def test_base_id_strips_version_and_url():

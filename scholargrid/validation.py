@@ -18,8 +18,8 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Dict, List, Optional, Sequence
 
 import numpy as np
 import pandas as pd
@@ -55,7 +55,7 @@ def validate(cfg: Config, df: pd.DataFrame, embeddings: np.ndarray, reduced: np.
     clusters = _validate_clusters(df, reduced, embeddings, labels, clusters_meta)
     clusters["stability"] = stability or {}
     report = {
-        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "pipeline_version": cfg["pipeline_version"],
         "data": {"papers": int(len(df)), "span_months": span_months(df),
                  "quality": quality or {}},
@@ -215,7 +215,7 @@ def _grades(df: pd.DataFrame, q: Dict, text: pd.Series) -> np.ndarray:
     return cat_ok.astype(int) + kw_ok.astype(int)
 
 
-def _dcg(gains: List[float]) -> float:
+def _dcg(gains: Sequence[float]) -> float:
     return float(sum((2 ** g - 1) / np.log2(i + 2) for i, g in enumerate(gains)))
 
 
@@ -406,7 +406,7 @@ def _write_markdown(cfg: Config, report: Dict) -> None:
         f"**{'yes' if g['sufficient_history'] else 'no'}**",
         f"- Clusters with a reliable growth signal: **{g['n_reliable']} / {g['n_clusters']}** "
         f"(below minimum counts: {g['n_below_min_counts']}, unstable: {g['n_unstable_clusters']})",
-        f"- Backtest: " + (f"{bt.get('flagged_growing')} flagged growing as of {bt.get('reference_date')}, "
+        "- Backtest: " + (f"{bt.get('flagged_growing')} flagged growing as of {bt.get('reference_date')}, "
                            f"hit rate **{_fmt(bt.get('hit_rate'))}**" if bt.get("available")
                            else f"not available ({bt.get('reason')})"),
         "",

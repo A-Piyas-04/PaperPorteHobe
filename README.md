@@ -91,14 +91,52 @@ for the technical reference.
 
 Edit `data.source` in [`configs/config.yaml`](configs/config.yaml):
 
-- `arxiv_api` *(default)* — live harvest from the arXiv API.
-- `kaggle` — point `data.kaggle_json` at a downloaded
-  `arxiv-metadata-oai-snapshot.json`.
-- `synthetic` — deterministic offline demo corpus (no network), useful for CI
-  and for trying the app without a harvest.
+- `arxiv_api` *(dev default)* — live harvest from the arXiv search API.
+- `kaggle` — streams a downloaded `arxiv-metadata-oai-snapshot.json`
+  (`data.kaggle_json`) into the Parquet/DuckDB paper store.
+- `oai_pmh` — incremental, resumable harvest from arXiv OAI-PMH (weekly refresh).
+- `synthetic` — deterministic offline demo corpus (no network), for CI and demos.
 
-Network sources fall back to `synthetic` automatically if the harvest fails, so
-a run always completes.
+Falling back to `synthetic` when a harvest fails is allowed only when
+`data.allow_synthetic_fallback: true` (dev). Production configs refuse it, and
+the app shows a banner whenever synthetic data is being served.
+
+### Configs and corpus size
+
+| Config | Purpose |
+|---|---|
+| `configs/config.yaml` | Local development (small sample, permissive gates) |
+| `configs/production.yaml` | Production build from the Kaggle snapshot (`profile: standard`, strict gates) |
+| `configs/refresh.yaml` | Weekly OAI-PMH refresh on top of production |
+| `configs/ci.yaml` | Offline nightly regression run |
+
+`data.profile` picks the corpus size: `dev` (5k), `standard` (50k), `full`
+(no cap) or `custom` (`max_papers`). Secrets (`OPENALEX_MAILTO`, `SENTRY_DSN`,
+`S2_API_KEY`) are read from environment variables only.
+
+### Pipeline, releases and operations
+
+```bash
+python pipeline/run_pipeline.py --config configs/production.yaml   # full build + publish
+python pipeline/run_pipeline.py --from-stage analyze               # rerun from a stage
+python -m scholargrid.release list | rollback <release-id>
+```
+
+Each run writes a staging bundle, validates it, and publishes a versioned
+release (`data/releases/<id>/` with `manifest.json` and `changelog.json`)
+only if the required validation gates pass. See
+[`Docs/runbook.md`](Docs/runbook.md) for rebuilds, rollbacks, refresh failures
+and secrets.
+
+### Development
+
+```bash
+pip install -e ".[ml,app,dev]"
+pytest                 # unit, integration and Streamlit smoke tests
+ruff check . && mypy
+pre-commit install
+docker build -t scholargrid .   # production image (non-root, health-checked)
+```
 
 ---
 
@@ -132,10 +170,17 @@ snapshot info, saved embeddings / cluster assignments / 2D coordinates, and a
 ## Validation (FR-15–FR-18)
 
 `python pipeline/run_pipeline.py` also writes
-[`reports/validation_report.md`](reports/validation_report.md):
-cluster cohesion & silhouette, semantic-search precision@k over a 16-query
-known-item benchmark, growth stability across 3/6/12-month windows and alternate
-cutoffs, and sparse-lead projection robustness.
+[`reports/validation_report.md`](reports/validation_report.md) and appends to
+`reports/validation_history.jsonl`:
+
+- Search: nDCG@10, MRR, precision@10 and recall@25 over 129 queries, for the
+  hybrid, dense-only and BM25-only modes.
+- Clusters: DBCV, NPMI coherence, keyword diversity, and subsample stability
+  (ARI and per-cluster survival).
+- Growth: minimum-count gating, bootstrap confidence intervals, stability across
+  windows and cutoffs, and a 12-month backtest.
+- Data quality checks, ANN recall, OpenAlex match rates, and a gates table that
+  decides whether the run is published.
 
 ---
 
@@ -144,9 +189,15 @@ cutoffs, and sparse-lead projection robustness.
 **Implemented** — all *Must* requirements, plus *Should*: sparse-neighbourhood
 detection, category/date filtering, and the evidence UI.
 
+**Version 2 (production readiness)** adds a scalable data layer (Kaggle
+streaming, OAI-PMH, Parquet/DuckDB), richer OpenAlex enrichment with citation
+history, incremental embeddings, an ANN index, hybrid BM25 + dense search,
+honest growth statistics, versioned releases with rollback, a weekly refresh
+workflow, CI and Docker. See
+[`Docs/production-readiness-plan.md`](Docs/production-readiness-plan.md).
+
 **Not yet implemented** (SRS stretch items): semantic-citation missing-link
-analysis via OpenAlex (FR-09), monthly refresh pipelines, and beginner
-research-entry recommendations.
+analysis (FR-09) and beginner research-entry recommendations.
 
 ## What ScholarGrid does *not* claim (SRS §21)
 

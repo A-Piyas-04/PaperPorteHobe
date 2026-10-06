@@ -70,6 +70,7 @@ select = ["E", "F", "W", "I", "B", "UP", "SIM"]
 ignore = [
     "E501",   # long lines are allowed where they read better
     "B008",
+    "B905",   # zip() over equal-length columns throughout
     "UP006", "UP007", "UP035", "UP045",  # typing.List/Optional kept for readability
     "SIM108",
 ]
@@ -85,6 +86,6 @@ known-first-party = ["scholargrid", "ui", "views"]
 python_version = "3.12"
 packages = ["scholargrid"]
 ignore_missing_imports = true
-warn_unused_ignores = true
+warn_unused_ignores = false  # optional backends (faiss, duckdb, sentry) may or may not be installed
 check_untyped_defs = false
 no_implicit_optional = true

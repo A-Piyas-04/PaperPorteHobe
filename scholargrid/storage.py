@@ -11,7 +11,7 @@ incremental harvests can be merged repeatedly without creating duplicates.
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import List, Optional
 
 import pandas as pd
@@ -38,7 +38,7 @@ def _conform(df: pd.DataFrame) -> pd.DataFrame:
     for col in ("first_submitted", "last_updated"):
         out[col] = pd.to_datetime(out[col], errors="coerce", utc=True).dt.tz_localize(None)
     if not out["ingested_at"].astype(bool).any():
-        out["ingested_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        out["ingested_at"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     out["year_month"] = out["first_submitted"].dt.strftime("%Y-%m")
     text_cols = [c for c in STORE_COLUMNS if c not in ("version", "first_submitted", "last_updated")]
     for col in text_cols:

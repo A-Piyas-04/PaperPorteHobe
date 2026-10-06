@@ -4,8 +4,8 @@ import textwrap
 
 import pytest
 import yaml
-
 from conftest import ROOT, make_config
+
 from scholargrid.pipeline import run
 
 AppTest = pytest.importorskip("streamlit.testing.v1").AppTest
