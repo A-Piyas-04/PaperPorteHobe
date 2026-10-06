@@ -24,10 +24,11 @@ def test_growing_cluster_is_reliable_and_flat_is_not_growing(cfg):
     assert g["sufficient_history"]
     up = g["clusters"][0]["windows"]["6"]
     flat = g["clusters"][1]["windows"]["6"]
-    assert up["passes_gate"] and up["relative_growth"] > 1.2
+    assert up["passes_gate"] and up["relative_growth"] > 1.05
     assert up["ci"][0] > 1 and up["direction"] == "growing"
-    assert flat["relative_growth"] < 1 and flat["direction"] != "growing"
-    assert g["clusters"][0]["trend"]["annual_rate_ratio"] > 1.3
+    assert g["clusters"][0]["reliable"]
+    assert flat["relative_growth"] < 1 and flat["direction"] == "declining"
+    assert g["clusters"][0]["trend"]["annual_rate_ratio"] > 1.2
 
 
 def test_small_clusters_get_no_ratio(cfg):

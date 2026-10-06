@@ -118,15 +118,15 @@ class Embedder:
 
         ecfg = self.cfg["embedding"]
         n_docs = len(texts)
-        dims = min(int(ecfg["tfidf_dims"]), max(2, n_docs - 1))
-        log.info("Fitting TF-IDF (max_features=%s) + SVD (dims=%d) on %d docs.",
-                 ecfg["tfidf_max_features"], dims, n_docs)
         self._vectorizer = TfidfVectorizer(
             max_features=int(ecfg["tfidf_max_features"]),
             stop_words="english", ngram_range=(1, 2),
             min_df=2 if n_docs > 50 else 1, max_df=0.9,
         )
         x = self._vectorizer.fit_transform(texts)
+        dims = min(int(ecfg["tfidf_dims"]), max(2, n_docs - 1), max(2, x.shape[1] - 1))
+        log.info("Fitting TF-IDF (max_features=%s) + SVD (dims=%d) on %d docs.",
+                 ecfg["tfidf_max_features"], dims, n_docs)
         self._svd = TruncatedSVD(n_components=dims, random_state=self.cfg["seed"])
         reduced = l2_normalize(self._svd.fit_transform(x).astype(np.float32))
         self.dim = reduced.shape[1]

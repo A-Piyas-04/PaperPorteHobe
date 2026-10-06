@@ -1,0 +1,90 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scholargrid"
+version = "2.0.0"
+description = "Research landscape explorer for arXiv computer science papers"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=2.0,<3",
+    "pandas>=2.2,<3",
+    "scikit-learn>=1.5,<2",
+    "scipy>=1.13,<2",
+    "pyyaml>=6.0",
+    "requests>=2.32",
+    "pydantic>=2.7,<3",
+    "pyarrow>=16",
+    "joblib>=1.4",
+]
+
+[project.optional-dependencies]
+ml = [
+    "sentence-transformers>=3.0",
+    "umap-learn>=0.5",
+    "hdbscan>=0.8",
+    "faiss-cpu>=1.8",
+    "duckdb>=1.0",
+]
+app = ["streamlit>=1.46,<2", "plotly>=6.0"]
+monitoring = ["sentry-sdk>=2.0"]
+dev = [
+    "pytest>=8",
+    "pytest-cov>=5",
+    "ruff>=0.6",
+    "mypy>=1.10",
+    "types-PyYAML",
+    "pre-commit>=3",
+    "pip-audit>=2.7",
+]
+
+[project.scripts]
+scholargrid-pipeline = "scholargrid.pipeline:main"
+scholargrid-release = "scholargrid.release:main"
+
+[tool.setuptools.packages.find]
+include = ["scholargrid*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = ["ignore::DeprecationWarning", "ignore::FutureWarning"]
+
+[tool.coverage.run]
+source = ["scholargrid"]
+omit = ["scholargrid/judgments.py"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+extend-exclude = ["notebooks", "app/components/explorer/frontend"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]
+ignore = [
+    "E501",   # long lines are allowed where they read better
+    "B008",
+    "UP006", "UP007", "UP035", "UP045",  # typing.List/Optional kept for readability
+    "SIM108",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E402", "B011"]
+"app/*" = ["E402"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["scholargrid", "ui", "views"]
+
+[tool.mypy]
+python_version = "3.12"
+packages = ["scholargrid"]
+ignore_missing_imports = true
+warn_unused_ignores = true
+check_untyped_defs = false
+no_implicit_optional = true

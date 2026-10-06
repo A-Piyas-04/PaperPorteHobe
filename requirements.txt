@@ -1,22 +1,29 @@
-# ScholarGrid — Research Landscape Explorer
-# Core (required). Versions pinned for reproducibility (NFR-03).
+# ScholarGrid - Research Landscape Explorer
+# Runtime dependencies, pinned for reproducible builds. pyproject.toml carries
+# the same set as ranges; regenerate a fully hashed lock with
+#   pip-compile --generate-hashes -o requirements.lock pyproject.toml --extra ml --extra app
+
+# Core
 numpy==2.3.1
 pandas==2.3.1
 scikit-learn==1.7.1
 scipy==1.16.1
-plotly==6.1.2
-streamlit==1.46.1
 pyyaml==6.0.2
 requests==2.32.4
+pydantic==2.13.5
+pyarrow==25.0.1
+joblib==1.6.0
 
-# Preferred analytical backends (optional).
-# The pipeline uses these automatically when importable, and falls back to
-# scikit-learn equivalents otherwise. Install for the SRS baseline methods
-# (FR-02 all-MiniLM-L6-v2, FR-03 UMAP + HDBSCAN).
-#   pip install sentence-transformers umap-learn hdbscan
-# sentence-transformers>=3.0
-# umap-learn>=0.5
-# hdbscan>=0.8
+# App
+plotly==6.1.2
+streamlit==1.46.1
 
-# Optional: citation missing-link analysis (FR-09, stretch).
-# pyalex>=0.15
+# Production analytical backends (production.yaml requires these)
+sentence-transformers==6.1.0
+umap-learn==0.5.12
+hdbscan==0.8.44
+faiss-cpu==1.15.1
+duckdb==1.5.6
+
+# Optional: error tracking (enabled only when SENTRY_DSN is set)
+# sentry-sdk>=2.0
