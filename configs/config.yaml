@@ -38,6 +38,21 @@ data:
   kaggle_json: data/raw/arxiv-metadata-oai-snapshot.json
 
 # ---------------------------------------------------------------------------
+# Optional enrichment (FR-09 groundwork): citations, references, venue
+# ---------------------------------------------------------------------------
+enrich:
+  openalex: true          # look papers up in OpenAlex by arXiv DOI (cached in data/raw)
+  mailto: ""              # optional contact email for OpenAlex's polite pool
+  batch: 50               # DOIs per request (max 100)
+
+# ---------------------------------------------------------------------------
+# Paper graph (Explore view): similarity edges between papers
+# ---------------------------------------------------------------------------
+graph:
+  k_neighbors: 6          # nearest neighbours linked per paper
+  coupling_boost: 0.15    # extra edge weight per shared reference (capped)
+
+# ---------------------------------------------------------------------------
 # FR-02  Paper embeddings
 # ---------------------------------------------------------------------------
 embedding:

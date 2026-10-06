@@ -16,8 +16,8 @@ def _clear_query() -> None:
     st.session_state.q = ""
 
 
-def _view_on_map() -> None:
-    st.session_state["highlight_matches"] = True
+def _open_in_explore(query: str, items: list) -> None:
+    st.session_state["explore_hl"] = {"query": query, "items": items, "req": None}
     st.session_state["focus_cluster"] = None
 
 
@@ -62,8 +62,8 @@ def _landing(bundle) -> None:
         ])
         st.markdown("<div style='height:1.2rem'></div>", unsafe_allow_html=True)
         c1, c2, _ = st.columns([1, 1, 1.4])
-        if c1.button("Explore the map", type="primary", use_container_width=True):
-            ui.goto("map")
+        if c1.button("Open the explorer", type="primary", use_container_width=True):
+            ui.goto("explore")
         if c2.button("Browse areas", use_container_width=True):
             ui.goto("areas")
 
@@ -93,9 +93,11 @@ def _results(bundle, query: str) -> None:
                 f"<span class='sg-ph-t'>{len(res['results'])} papers</span>"
                 f"<span class='sg-ph-m'>across {n_areas} area{'s' if n_areas != 1 else ''}"
                 f"</span></div>", unsafe_allow_html=True)
-            if a.button("View on map", type="primary", use_container_width=True,
-                        on_click=_view_on_map):
-                ui.goto("map")
+            items = [[int(i), round(float(r["score"]), 4)]
+                     for i, r in zip(res["result_indices"], res["results"])]
+            if a.button("See the graph", type="primary", use_container_width=True,
+                        on_click=_open_in_explore, args=(query, items)):
+                ui.goto("explore")
             pills = [f"{ui.area_name(clusters, d['cluster_id'])} · {d['count']}"
                      for d in res["cluster_distribution"][:5]]
             st.markdown(ui.keyword_pills(pills), unsafe_allow_html=True)

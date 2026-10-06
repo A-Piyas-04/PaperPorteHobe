@@ -19,6 +19,10 @@ data/processed/*
 reports/*
 !reports/.gitkeep
 
+# Explorer component: commit the built dist/, never node_modules.
+app/components/explorer/frontend/node_modules/
+*.log
+
 # OS / editor
 .DS_Store
 .idea/

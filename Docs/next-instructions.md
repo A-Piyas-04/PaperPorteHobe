@@ -15,6 +15,9 @@ edit). Most people need only Steps 1–4.
 | Python | 3.12.2 via the `py` launcher (`python3` does **not** work on Windows) |
 | `.venv` | ✅ created and populated (core stack + MiniLM / UMAP / HDBSCAN) |
 | Real arXiv data | ✅ built in `data/processed/` — 1,275 papers · 26 clusters · 12 leads · precision@k = 0.88 · using the SRS baseline backends (MiniLM · UMAP · HDBSCAN) |
+| Authors / citations | ✅ authors for every paper (arXiv); OpenAlex matched 643 papers (citations are ~0 because the papers are a week old) |
+| Paper graph | ✅ 5,977 similarity links in `edges.json` / `neighbors.json` |
+| Explore view | ✅ React component built into `app/components/explorer/frontend/dist` (committed — no Node needed to run or deploy) |
 | Validation report | ✅ `reports/validation_report.md` up to date |
 | GitHub | ✅ repo pushed to `origin` → <https://github.com/A-Piyas-04/PaperPorteHobe> |
 | Git LFS | installed (needed only for Step 5, Track B) |
@@ -94,8 +97,15 @@ python pipeline\run_pipeline.py
 ```
 
 - The raw harvest is cached in `data\raw\arxiv_harvest.csv`, so re-running
-  **reuses the same papers** and only redoes the analysis (no network).
-- Runtime: ~3 minutes on this machine.
+  **reuses the same papers** and only redoes the analysis.
+- Citations, references and venue come from OpenAlex (`enrich:` in the
+  config), cached in `data\raw\openalex.json`. Matches refresh weekly and misses
+  are retried daily; if OpenAlex is unreachable the run simply continues
+  without citations. Set `enrich.openalex: false` to skip it, and put your email
+  in `enrich.mailto` for faster, politer access.
+- The paper graph links each paper to its `graph.k_neighbors` most similar
+  papers; pairs that cite the same works get a boost once references exist.
+- Runtime: ~2–3 minutes on this machine.
 - When it finishes you'll see `papers=… clusters=… leads=… precision@k=…` and
   an updated [`reports/validation_report.md`](../reports/validation_report.md).
 - Check which methods were actually used in `data\processed\meta.json` →
@@ -134,12 +144,50 @@ streamlit run app\streamlit_app.py
 The app runs headless, so it **won't open a browser by itself** — 🌐 open
 <http://localhost:8501> manually. Stop it with `Ctrl+C`.
 
-**Using it:** type a topic (or click an example) → the map highlights matches →
-click or lasso points to inspect papers → open any area from *Research areas* →
-expand *Growth*, *Investigation leads*, *How it works*, *Limitations* at the
-bottom. Every paper links to arXiv.
+**Using it:**
+
+- **Search** — type a topic or click an example; results show authors,
+  citations and the area each paper belongs to. *See the graph* opens the
+  matches in Explore.
+- **Explore** — three panes: a paper list on the left, the paper graph in the
+  middle, details on the right. Hover a paper (in the list or the graph) to
+  light up its similar papers; click to select it and read the abstract, open
+  arXiv/PDF, or jump to similar papers. Search, area and category filters sit
+  in the top bar. `Esc` clears the selection, *Fit* resets the view.
+- **Areas / Trends / Leads / About** — browse topics, activity, sparse
+  neighbourhoods and how it all works.
 
 ✅ At this point ScholarGrid is fully functional on your machine.
+
+### Editing the Explore view (only if you change the React code)
+
+The Explore page is a custom Streamlit component in
+`app\components\explorer\frontend` (Vite + React + TypeScript + sigma.js).
+The built bundle in `frontend\dist` is committed, so you only need Node.js
+(v18+) when you edit it.
+
+```powershell
+cd app\components\explorer\frontend
+npm install          # once
+npm run dev          # terminal 1: live dev server on http://localhost:5173
+```
+
+In a second terminal, from the project root, point Streamlit at the dev server:
+
+```powershell
+$env:SCHOLARGRID_DEV = "1"
+streamlit run app\streamlit_app.py
+```
+
+Edits now hot-reload inside the app. When you're done, build and commit:
+
+```powershell
+cd app\components\explorer\frontend
+npm run build        # type-checks, then writes dist\
+cd ..\..\..\..
+Remove-Item Env:SCHOLARGRID_DEV
+git add app\components\explorer\frontend\dist
+```
 
 ---
 
@@ -276,6 +324,9 @@ git checkout main
 | `meta.json` still shows `tfidf` / `pca` / `kmeans` after Step 2 | Install into the **activated** venv, then re-run Step 3. |
 | Harvest returns 0 papers | `data.date_end` is before the newest papers — set it to today's date. |
 | Growth numbers look flat/meaningless | The corpus spans ~1 week — see the note in Step 3. |
+| Explore says *"The explorer component has not been built yet"* | `frontend\dist` is missing — run `npm install` and `npm run build` in `app\components\explorer\frontend`. |
+| Explore stays blank with `SCHOLARGRID_DEV=1` | The dev server isn't running — start `npm run dev`, or `Remove-Item Env:SCHOLARGRID_DEV` to use the built bundle. |
+| Every paper shows 0 citations | Expected for week-old papers; node size then uses the number of similar papers. Citations appear as OpenAlex catches up (re-run Step 3 after a week or two). |
 | Space build fails on `numpy`/`scipy` install | Add `python_version: "3.12"` to the README metadata (Step 5). |
 | Space push rejected for binary/large files | Use Git LFS (Track B) or deploy Track A. |
 | `git push space` asks for a password | Use your Hugging Face **access token**, not your account password. |

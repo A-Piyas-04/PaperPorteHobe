@@ -29,7 +29,7 @@ from .utils import get_logger
 
 log = get_logger("ingest")
 
-COLUMNS = ["arxiv_id", "title", "abstract", "categories", "primary_category", "date"]
+COLUMNS = ["arxiv_id", "title", "abstract", "authors", "categories", "primary_category", "date"]
 
 
 # ---------------------------------------------------------------------------
@@ -54,6 +54,9 @@ def build_corpus(cfg: Config) -> pd.DataFrame:
     else:
         raise ValueError(f"Unknown data.source: {source}")
 
+    if "authors" not in raw.columns:
+        raw["authors"] = ""
+    raw["authors"] = raw["authors"].fillna("").astype(str)
     clean = _clean(raw, cfg)
     log.info("Corpus ready: %d papers after cleaning.", len(clean))
     return clean
@@ -110,6 +113,10 @@ def _harvest_arxiv(cfg: Config) -> pd.DataFrame:
     if d.get("use_cache", True) and os.path.exists(cache):
         df = pd.read_csv(cache, dtype=str)
         log.info("Loaded %d raw records from cache %s", len(df), cache)
+        if "authors" not in df.columns:
+            df = _backfill_authors(df)
+            df.to_csv(cache, index=False)
+            log.info("Backfilled authors into cache %s", cache)
         return df
 
     per_query = max(1, d["max_papers"] // max(1, len(d["arxiv_queries"])))
@@ -151,6 +158,29 @@ def _harvest_query(query: str, want: int, page: int = 100) -> List[Dict]:
     return out
 
 
+def _backfill_authors(df: pd.DataFrame, batch: int = 100) -> pd.DataFrame:
+    """Fetch authors for an older cache that predates the authors column."""
+    ids = df["arxiv_id"].astype(str).tolist()
+    found: Dict[str, str] = {}
+    for i in range(0, len(ids), batch):
+        chunk = ids[i:i + batch]
+        params = {"id_list": ",".join(chunk), "max_results": len(chunk)}
+        url = "http://export.arxiv.org/api/query?" + urllib.parse.urlencode(params)
+        try:
+            with urllib.request.urlopen(url, timeout=60) as resp:
+                feed = ET.fromstring(resp.read())
+            for e in feed.findall("a:entry", _ATOM):
+                rec = _parse_entry(e)
+                found[rec["arxiv_id"]] = rec["authors"]
+        except Exception as exc:  # pragma: no cover - network dependent
+            log.warning("Author backfill batch %d failed: %s", i // batch, exc)
+        time.sleep(3)
+    df = df.copy()
+    df["authors"] = df["arxiv_id"].astype(str).map(found).fillna("")
+    log.info("Backfilled authors for %d / %d papers.", (df["authors"] != "").sum(), len(df))
+    return df
+
+
 def _parse_entry(e: ET.Element) -> Dict:
     def text(tag: str) -> str:
         node = e.find(tag, _ATOM)
@@ -161,10 +191,13 @@ def _parse_entry(e: ET.Element) -> Dict:
     cats = [c.attrib.get("term", "") for c in e.findall("a:category", _ATOM)]
     primary = e.find("arxiv:primary_category", _ATOM)
     primary_cat = primary.attrib.get("term", cats[0] if cats else "") if primary is not None else (cats[0] if cats else "")
+    authors = [(a.findtext("a:name", default="", namespaces=_ATOM) or "").strip()
+               for a in e.findall("a:author", _ATOM)]
     return {
         "arxiv_id": arxiv_id,
         "title": text("a:title"),
         "abstract": text("a:summary"),
+        "authors": "; ".join(a for a in authors if a),
         "categories": " ".join([c for c in cats if c]),
         "primary_category": primary_cat,
         "date": text("a:published"),
@@ -194,6 +227,8 @@ def _load_kaggle(cfg: Config) -> pd.DataFrame:
                 "arxiv_id": rec.get("id", ""),
                 "title": rec.get("title", ""),
                 "abstract": rec.get("abstract", ""),
+                "authors": "; ".join(" ".join(p for p in (a[1], a[0]) if p).strip()
+                                     for a in rec.get("authors_parsed", []) if a),
                 "categories": cats,
                 "primary_category": cats.split(" ")[0] if cats else "",
                 "date": date,
@@ -245,6 +280,11 @@ _TOPICS = {
 }
 
 
+_FIRST = ["A.", "B.", "C.", "D.", "E.", "F.", "H.", "J.", "K.", "L.", "M.", "N.", "R.", "S.", "T."]
+_LAST = ["Chen", "Rahman", "Garcia", "Kim", "Novak", "Okafor", "Silva", "Ito", "Patel",
+         "Muller", "Haque", "Rossi", "Nguyen", "Kowalski", "Ahmed", "Larsen"]
+
+
 def _synthetic(cfg: Config) -> pd.DataFrame:
     """Create a deterministic corpus with planted topic structure and a mild
     temporal growth trend, so every pipeline stage has meaningful signal
@@ -281,6 +321,8 @@ def _synthetic(cfg: Config) -> pd.DataFrame:
             "arxiv_id": f"synth.{i:05d}",
             "title": title,
             "abstract": abstract,
+            "authors": "; ".join(f"{rng.choice(_FIRST)} {rng.choice(_LAST)}"
+                                 for _ in range(int(rng.integers(1, 5)))),
             "categories": f"{cat} cs.AI",
             "primary_category": cat,
             "date": date.isoformat(),

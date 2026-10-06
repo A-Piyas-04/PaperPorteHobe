@@ -10,7 +10,7 @@ _STEPS = [
     ("Embed", "Each title and abstract becomes a vector ({embedding}). Your searches use the same model."),
     ("Group", "Similar papers are grouped into research areas ({reduce} → {cluster})."),
     ("Name", "Each area is named from its most distinctive keywords."),
-    ("Map", "Everything is laid out in 2D ({landscape}) so you can see the field."),
+    ("Connect", "Papers are laid out in 2D ({landscape}) and linked to their most similar neighbours."),
     ("Check", "Search quality, cluster quality and robustness are validated on every run."),
 ]
 
@@ -36,7 +36,8 @@ def render() -> None:
     with ui.panel("limits"):
         ui.panel_header("Keep in mind")
         st.markdown("""
-- The map is a **picture, not proof**. Distances on it can mislead.
+- The graph is a **picture, not proof**. Distances and links can mislead.
+- **Citations lag.** Very recent papers have few or none yet, so node size uses links instead.
 - **Quiet ≠ new.** A sparse spot may just mean few papers were collected.
 - **More papers ≠ better research.** Activity is not quality.
 - **Similar wording ≠ compatible science.**

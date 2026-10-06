@@ -83,10 +83,10 @@ def _detail(bundle, cid: int) -> None:
             f"{ui.keyword_pills(info.get('keywords', [])[:10])}",
             unsafe_allow_html=True)
         c1, _ = st.columns([1, 2.5])
-        if c1.button("See on map", type="primary", use_container_width=True):
+        if c1.button("Open in Explore", type="primary", use_container_width=True):
             st.session_state["focus_cluster"] = cid
-            st.session_state["highlight_matches"] = False
-            ui.goto("map")
+            st.session_state["explore_hl"] = None
+            ui.goto("explore")
 
     left, right = st.columns([1.5, 1], gap="medium")
     with left, ui.panel("area-papers"):

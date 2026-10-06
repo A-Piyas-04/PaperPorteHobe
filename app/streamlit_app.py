@@ -28,13 +28,13 @@ st.set_page_config(page_title="ScholarGrid", page_icon="🔭", layout="wide")
 
 def _build_pages() -> dict:
     """Create the st.Page objects, keyed by a short name for programmatic nav."""
-    from views import about, areas, home, leads, map_view, trends
+    from views import about, areas, explore, home, leads, trends
 
     return {
         "home": st.Page(home.render, title="Search", icon=":material/search:",
                         url_path="home", default=True),
-        "map": st.Page(map_view.render, title="Map", icon=":material/scatter_plot:",
-                       url_path="map"),
+        "explore": st.Page(explore.render, title="Explore", icon=":material/hub:",
+                           url_path="explore"),
         "areas": st.Page(areas.render, title="Areas", icon=":material/category:",
                          url_path="areas"),
         "trends": st.Page(trends.render, title="Trends", icon=":material/trending_up:",

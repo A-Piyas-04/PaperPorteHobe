@@ -4,7 +4,7 @@ Global light-editorial stylesheet, loading/transition effects, reusable
 components (panels, cards, pills, tables, skeletons) and the data helpers every
 page needs.
 
-Design rules: large readable type (nothing renders below ~15px), white section
+Design rules: a 16px type scale with clear heading steps, white section
 panels on a soft grey page so sections are clearly separated, flat bordered
 cards with a small hover lift, fade/slide entrances, a thin top progress bar
 while the app is working. No dark/glass surfaces, gradient heroes, glows,
@@ -61,25 +61,25 @@ _CSS = """
     --bg:#f4f5f7; --soft:#eef2fb;
   }
 
-  /* ---- Base type: scale every rem-based Streamlit size up ------------- */
-  html { font-size: 18px !important; }
+  /* ---- Type scale (16px base): 40 / 22 / 18 / 16 / 14 / 13 ----------- */
+  html { font-size: 16px !important; }
   .stApp { background: var(--bg); color: var(--ink); }
   .block-container {
-    max-width: 1240px; padding-top: 0 !important; padding-bottom: 5rem;
+    max-width: 1240px; padding-top: 0 !important; padding-bottom: 4rem;
   }
   [data-testid="stMarkdownContainer"] p,
-  [data-testid="stMarkdownContainer"] li { font-size: 1.02rem; line-height: 1.6; }
+  [data-testid="stMarkdownContainer"] li { font-size: 1rem; line-height: 1.6; }
   [data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] p {
-    font-size: .92rem !important; color: var(--muted) !important;
+    font-size: .875rem !important; color: var(--muted) !important;
   }
   [data-testid="stWidgetLabel"] p {
-    font-size: .95rem !important; font-weight: 700; color: var(--ink);
+    font-size: .875rem !important; font-weight: 700; color: var(--ink);
   }
   [data-testid="stSliderThumbValue"], [data-testid="stSliderTickBarMin"],
   [data-testid="stSliderTickBarMax"] {
-    font-family: inherit !important; font-size: .9rem !important;
+    font-family: inherit !important; font-size: .875rem !important;
   }
-  [data-baseweb="select"] * , [data-baseweb="tag"] span { font-size: .95rem !important; }
+  [data-baseweb="select"] * , [data-baseweb="tag"] span { font-size: .9375rem !important; }
   a { color: var(--accent); }
 
   /* ---- Chrome: hide dev header/status, keep a clean canvas ------------ */
@@ -115,17 +115,17 @@ _CSS = """
   /* ---- Top navigation ------------------------------------------------- */
   .st-key-topnav {
     position: sticky; top: 0; z-index: 999; background: var(--bg);
-    padding: 1rem 0 .9rem; margin-bottom: 1.4rem;
+    padding: .85rem 0 .75rem; margin-bottom: 1.5rem;
     border-bottom: 1px solid var(--border);
   }
-  .sg-brand { font-size: 1.4rem; font-weight: 800; color: var(--ink);
+  .sg-brand { font-size: 1.375rem; font-weight: 800; color: var(--ink);
               white-space: nowrap; letter-spacing: -.01em; }
   .st-key-topnav [data-testid="stPageLink"] a {
-    padding: .55rem .95rem; border-radius: 12px; justify-content: center;
+    padding: .5rem .9rem; border-radius: 10px; justify-content: center;
     transition: background .18s ease, color .18s ease;
   }
   .st-key-topnav [data-testid="stPageLink"] a p {
-    font-size: 1.02rem !important; font-weight: 650; color: var(--muted);
+    font-size: 1rem !important; font-weight: 650; color: var(--muted);
   }
   .st-key-topnav [data-testid="stPageLink"] a:hover { background: #e8ecf5; }
   .st-key-topnav [data-testid="stPageLink"] a:hover p { color: var(--ink); }
@@ -136,25 +136,25 @@ _CSS = """
 
   /* ---- Section panels: white blocks on the grey page ----------------- */
   div[class*="st-key-panel-"] {
-    background: #fff; border: 1px solid var(--border); border-radius: 20px;
-    padding: 2rem 2.2rem 1.8rem; margin-bottom: 1.6rem;
+    background: #fff; border: 1px solid var(--border); border-radius: 16px;
+    padding: 1.75rem 2rem 1.6rem; margin-bottom: 1.5rem;
     box-shadow: 0 1px 3px rgba(16,24,40,.05);
     animation: sgRise .5s cubic-bezier(.2,.7,.2,1) both;
   }
   .sg-ph { display: flex; align-items: baseline; justify-content: space-between;
-           gap: 1rem; padding-bottom: .9rem; margin-bottom: 1.2rem;
+           gap: 1rem; padding-bottom: .85rem; margin-bottom: 1.15rem;
            border-bottom: 1px solid #eceef2; }
-  .sg-ph-t { font-size: 1.45rem; font-weight: 800; color: var(--ink);
+  .sg-ph-t { font-size: 1.375rem; font-weight: 800; color: var(--ink);
              letter-spacing: -.01em; }
-  .sg-ph-m { font-size: .95rem; color: var(--muted); font-weight: 600;
+  .sg-ph-m { font-size: .875rem; color: var(--muted); font-weight: 600;
              white-space: nowrap; }
 
   /* ---- Page header ---------------------------------------------------- */
   .sg-eyebrow { color: var(--accent); font-weight: 800; letter-spacing: .1em;
-                text-transform: uppercase; font-size: .85rem; margin-bottom: .5rem; }
-  .sg-title { font-size: 2.6rem; font-weight: 800; line-height: 1.12;
+                text-transform: uppercase; font-size: .8125rem; margin-bottom: .5rem; }
+  .sg-title { font-size: 2.5rem; font-weight: 800; line-height: 1.12;
               color: var(--ink); letter-spacing: -.02em; margin: 0 0 .6rem; }
-  .sg-lead { color: var(--muted); font-size: 1.15rem; line-height: 1.55;
+  .sg-lead { color: var(--muted); font-size: 1.125rem; line-height: 1.55;
              margin: 0 0 1.4rem; max-width: 46rem; }
   .sg-page-head { animation: sgRise .45s cubic-bezier(.2,.7,.2,1) both;
                   margin: .4rem 0 1.6rem; }
@@ -168,15 +168,15 @@ _CSS = """
     border-color: var(--accent) !important; box-shadow: 0 0 0 4px #e3ebfc;
   }
   [data-testid="stTextInput"] input {
-    height: 3.6rem; font-size: 1.2rem !important; padding: 0 1.2rem;
+    height: 3.4rem; font-size: 1.125rem !important; padding: 0 1.1rem;
     background: #fff !important; color: var(--ink);
   }
 
   /* ---- Buttons -------------------------------------------------------- */
   [data-testid="stButton"] button { transition: all .18s ease; }
-  [data-testid="stButton"] button p { font-size: 1rem !important; font-weight: 650; }
+  [data-testid="stButton"] button p { font-size: .9375rem !important; font-weight: 650; }
   [data-testid="stBaseButton-secondary"], [data-testid="stBaseButton-primary"] {
-    min-height: 3rem; border-radius: 12px !important;
+    min-height: 2.75rem; border-radius: 10px !important;
   }
   [data-testid="stBaseButton-secondary"] {
     border: 1.5px solid var(--border) !important; background: #fff !important;
@@ -188,16 +188,6 @@ _CSS = """
   [data-testid="stBaseButton-secondary"]:hover p { color: var(--accent) !important; }
   [data-testid="stButton"] button:active { transform: translateY(0); }
 
-  /* Area list rows on the map page */
-  .st-key-arealist [data-testid="stBaseButton-tertiary"] {
-    justify-content: flex-start; min-height: 2.5rem; padding: .3rem .6rem;
-    border-radius: 10px; width: 100%;
-  }
-  .st-key-arealist [data-testid="stBaseButton-tertiary"] p {
-    color: var(--ink) !important; font-weight: 600; text-align: left;
-  }
-  .st-key-arealist [data-testid="stBaseButton-tertiary"]:hover { background: #f1f4f9; }
-  .st-key-arealist [data-testid="stBaseButton-tertiary"]:hover p { color: var(--accent) !important; }
   [data-testid="stBaseButton-primary"], [data-testid="stButton"] button[kind="primary"] {
     background: var(--accent) !important; border-color: var(--accent) !important;
     color: #fff !important;
@@ -211,8 +201,8 @@ _CSS = """
               gap: 1rem; }
   .sg-tile { background: #f8f9fb; border: 1px solid #eceef2; border-radius: 16px;
              padding: 1.3rem 1.4rem; }
-  .sg-tile .v { font-size: 2.2rem; font-weight: 800; color: var(--ink); line-height: 1.05; }
-  .sg-tile .k { font-size: .88rem; color: var(--muted); margin-top: .45rem;
+  .sg-tile .v { font-size: 2rem; font-weight: 800; color: var(--ink); line-height: 1.05; }
+  .sg-tile .k { font-size: .8125rem; color: var(--muted); margin-top: .45rem;
                 text-transform: uppercase; letter-spacing: .07em; font-weight: 700; }
 
   /* ---- Paper card ----------------------------------------------------- */
@@ -224,16 +214,18 @@ _CSS = """
   }
   .sg-card:hover { transform: translateY(-2px); border-color: #cfd5de;
                    box-shadow: 0 8px 24px rgba(16,24,40,.08); }
-  .sg-card .t { font-size: 1.12rem; font-weight: 700; line-height: 1.4; color: var(--ink); }
+  .sg-card .t { font-size: 1.125rem; font-weight: 700; line-height: 1.4; color: var(--ink); }
   .sg-card .t a { color: var(--ink); text-decoration: none; }
   .sg-card .t a:hover { color: var(--accent); }
+  .sg-card .a { color: var(--muted); font-size: .9375rem; margin-top: .3rem; }
   .sg-card .m { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: .6rem;
                 align-items: center; }
-  .sg-card .s { color: #3d4553; font-size: .98rem; margin-top: .65rem; line-height: 1.55; }
+  .sg-card .s { color: #3d4553; font-size: .9375rem; margin-top: .65rem; line-height: 1.6; }
   .sg-chip { background: #f1f3f6; color: #3b4352; border-radius: 8px;
-             padding: .18rem .6rem; font-size: .86rem; font-weight: 650; }
+             padding: .18rem .6rem; font-size: .8125rem; font-weight: 650; }
   .sg-chip.area { background: var(--soft); color: #1f4fb8; }
-  .sg-score { margin-left: auto; color: var(--muted); font-size: .86rem; font-weight: 650; }
+  .sg-chip.cites { background: #fdf3e6; color: #8a4b08; }
+  .sg-score { margin-left: auto; color: var(--muted); font-size: .8125rem; font-weight: 650; }
 
   /* ---- Area card (keyed container) ----------------------------------- */
   div[class*="st-key-card-"] {
@@ -244,23 +236,23 @@ _CSS = """
   }
   div[class*="st-key-card-"]:hover { transform: translateY(-3px); border-color: #cfd5de;
                                      box-shadow: 0 10px 28px rgba(16,24,40,.09); }
-  .sg-area-t { font-size: 1.25rem; font-weight: 800; color: var(--ink); line-height: 1.3; }
-  .sg-area-m { color: var(--muted); font-size: .95rem; font-weight: 600; margin-top: .35rem; }
+  .sg-area-t { font-size: 1.125rem; font-weight: 800; color: var(--ink); line-height: 1.3; }
+  .sg-area-m { color: var(--muted); font-size: .875rem; font-weight: 600; margin-top: .35rem; }
   .sg-swatch { display: inline-block; width: .8rem; height: .8rem; border-radius: 4px;
                margin-right: .5rem; vertical-align: middle; }
 
   /* ---- Pills ---------------------------------------------------------- */
   .sg-pills { display: flex; flex-wrap: wrap; gap: .45rem; margin: .8rem 0 .6rem; }
   .sg-pill { background: #f1f3f6; color: #333b49; border-radius: 999px;
-             padding: .28rem .8rem; font-size: .88rem; font-weight: 650; }
+             padding: .28rem .8rem; font-size: .8125rem; font-weight: 650; }
   .sg-badge { display: inline-block; padding: .2rem .7rem; border-radius: 999px;
-              font-size: .85rem; font-weight: 750; margin-left: .4rem; }
+              font-size: .8125rem; font-weight: 750; margin-left: .4rem; }
   .sg-up { background: #e5f4ec; color: #17734c; }
   .sg-flat { background: #eef0f3; color: #4d5665; }
 
   /* ---- Callout -------------------------------------------------------- */
   .sg-note { background: #f3f6fd; border: 1px solid #dce5f8; border-radius: 14px;
-             padding: 1rem 1.2rem; color: #27324a; font-size: 1rem; margin: .2rem 0 1rem;
+             padding: .95rem 1.15rem; color: #27324a; font-size: .9375rem; margin: .2rem 0 1rem;
              animation: sgFade .4s ease both; }
   .sg-note b { color: var(--ink); }
 
@@ -273,8 +265,8 @@ _CSS = """
   @keyframes sgGrow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 
   /* ---- Table ---------------------------------------------------------- */
-  .sg-table { width: 100%; border-collapse: collapse; font-size: 1rem; }
-  .sg-table th { text-align: left; color: var(--muted); font-weight: 800; font-size: .82rem;
+  .sg-table { width: 100%; border-collapse: collapse; font-size: .9375rem; }
+  .sg-table th { text-align: left; color: var(--muted); font-weight: 800; font-size: .75rem;
                  text-transform: uppercase; letter-spacing: .06em; padding: .7rem .8rem;
                  border-bottom: 2px solid var(--border); }
   .sg-table td { padding: .9rem .8rem; border-bottom: 1px solid #eef0f3; color: var(--ink); }
@@ -415,7 +407,7 @@ def fmt_date(d) -> str:
 # Navigation
 # ---------------------------------------------------------------------------
 def render_top_nav(pages: dict) -> None:
-    order = ["home", "map", "areas", "trends", "leads", "about"]
+    order = ["home", "explore", "areas", "trends", "leads", "about"]
     with st.container(key="topnav"):
         cols = st.columns([2.4, 1, 1, 1, 1, 1, 1], gap="small",
                           vertical_alignment="center")
@@ -479,10 +471,29 @@ def keyword_pills(words: Iterable[str]) -> str:
     return f"<div class='sg-pills'>{pills}</div>"
 
 
+@st.cache_resource(show_spinner=False)
+def _paper_index(version: str) -> dict:
+    df = get_bundle().df
+    return {str(a): (str(au or ""), int(c))
+            for a, au, c in zip(df["arxiv_id"], df["authors"], df["cited_by_count"])}
+
+
+def author_line(authors: str, max_names: int = 3) -> str:
+    names = [n.strip() for n in str(authors or "").split(";") if n.strip()]
+    if not names:
+        return ""
+    more = f" +{len(names) - max_names}" if len(names) > max_names else ""
+    return ", ".join(names[:max_names]) + more
+
+
 def paper_card(title: str, arxiv_id: str, *, category: str | None = None,
                date=None, area: str | None = None, score: float | None = None,
                snippet: str | None = None, delay: int = 0) -> None:
+    index = _paper_index(get_bundle().meta.get("generated_at", "v1"))
+    authors, cites = index.get(str(arxiv_id), ("", 0))
     chips = ""
+    if cites:
+        chips += f"<span class='sg-chip cites'>{cites:,} citation{'s' if cites != 1 else ''}</span>"
     if category:
         chips += f"<span class='sg-chip'>{html.escape(str(category))}</span>"
     if date is not None:
@@ -495,7 +506,8 @@ def paper_card(title: str, arxiv_id: str, *, category: str | None = None,
         f"<div class='sg-card' style='animation-delay:{min(delay, 12) * 45}ms'>"
         f"<div class='t'><a href='https://arxiv.org/abs/{html.escape(str(arxiv_id))}' "
         f"target='_blank' rel='noopener'>{html.escape(str(title))}</a></div>"
-        f"<div class='m'>{chips}</div>"
+        + (f"<div class='a'>{html.escape(author_line(authors))}</div>" if authors else "")
+        + f"<div class='m'>{chips}</div>"
     )
     if snippet:
         body += f"<div class='s'>{html.escape(snippet)}</div>"

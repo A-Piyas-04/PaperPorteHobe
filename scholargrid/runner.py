@@ -16,6 +16,8 @@ from .clustering import cluster
 from .config import Config, capabilities
 from .data_ingest import build_corpus, snapshot_info
 from .embeddings import Embedder, paper_text
+from .enrich import enrich
+from .graph import build_graph
 from .growth import compute_growth
 from .labeling import generate_labels
 from .reduce import project_2d, reduce_analytical
@@ -47,6 +49,9 @@ def run(cfg: Config, progress: ProgressFn = None) -> Tuple[Dict, Dict]:
     _tick(progress, 0.05, "Ingesting arXiv corpus…")
     df = build_corpus(cfg)
 
+    _tick(progress, 0.15, "Looking up citations…")
+    df = enrich(df, cfg)
+
     emb_backend = cfg.resolve_embedding_backend()
     _tick(progress, 0.25, f"Embedding {len(df)} papers ({emb_backend})…")
     embedder = Embedder(emb_backend, cfg)
@@ -71,6 +76,9 @@ def run(cfg: Config, progress: ProgressFn = None) -> Tuple[Dict, Dict]:
     _tick(progress, 0.85, "Detecting sparse neighbourhoods…")
     sparse_leads = detect_sparse(df, embeddings, coords2d, labels, cfg, clusters_meta)
 
+    _tick(progress, 0.88, "Linking related papers…")
+    edges, neighbors = build_graph(df, embeddings, cfg)
+
     meta = {
         "pipeline_version": cfg["pipeline_version"],
         "scholargrid_version": __version__,
@@ -93,12 +101,17 @@ def run(cfg: Config, progress: ProgressFn = None) -> Tuple[Dict, Dict]:
             "papers": int(len(df)), "clusters": len(clusters_meta),
             "noise": int((labels == -1).sum()), "sparse_leads": len(sparse_leads),
             "embedding_dim": int(embeddings.shape[1]),
+            "edges": len(edges),
+            "with_authors": int((df["authors"].fillna("") != "").sum()),
+            "with_references": int((df["reference_count"] > 0).sum()),
+            "with_citations": int((df["cited_by_count"] > 0).sum()),
         },
     }
 
     _tick(progress, 0.92, "Saving artifacts…")
     save_bundle(cfg, df, embeddings, reduced, coords2d, labels,
-                clusters_meta, growth, sparse_leads, embedder, meta)
+                clusters_meta, growth, sparse_leads, embedder, meta,
+                edges=edges, neighbors=neighbors)
 
     _tick(progress, 0.96, "Validating…")
     report = validate(cfg, df, embeddings, reduced, labels, clusters_meta,
