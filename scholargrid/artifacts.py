@@ -35,11 +35,22 @@ NEIGHBORS_JSON = "neighbors.json"
 META_JSON = "meta.json"
 EMBEDDER_DIR = "embedder"
 _CSV_MAX_ROWS = 20000
+_MMAP_MIN_BYTES = 512 * 1024 * 1024
 
 _OPTIONAL_DEFAULTS = {"authors": "", "venue": "", "venue_type": "", "references": "",
                       "openalex_id": "", "author_ids": "", "topic": "",
                       "cited_by_count": 0, "reference_count": 0,
                       "citation_velocity": 0.0, "sample_weight": 1.0}
+
+
+def _save_array(path: str, arr: np.ndarray) -> None:
+    try:
+        np.save(path, arr)
+    except OSError as exc:
+        raise OSError(
+            f"Could not write {path} ({exc}). On Windows this usually means a running "
+            "ScholarGrid app has the old bundle open; stop it and rerun with "
+            "`--from-stage analyze`.") from exc
 
 
 def save_bundle(cfg: Config, df: pd.DataFrame, embeddings: np.ndarray,
@@ -62,8 +73,8 @@ def save_bundle(cfg: Config, df: pd.DataFrame, embeddings: np.ndarray,
         os.remove(csv_path)
 
     dtype = np.float16 if cfg["embedding"]["dtype"] == "float16" else np.float32
-    np.save(os.path.join(out, EMBEDDINGS_NPY), np.asarray(embeddings).astype(dtype))
-    np.save(os.path.join(out, REDUCED_NPY), reduced.astype(np.float32))
+    _save_array(os.path.join(out, EMBEDDINGS_NPY), np.asarray(embeddings).astype(dtype))
+    _save_array(os.path.join(out, REDUCED_NPY), reduced.astype(np.float32))
     save_json({str(k): v for k, v in clusters_meta.items()}, os.path.join(out, CLUSTERS_JSON))
     save_json(growth, os.path.join(out, GROWTH_JSON))
     save_json(sparse_leads, os.path.join(out, SPARSE_JSON))
@@ -127,7 +138,10 @@ def load_bundle(cfg: Config, directory: Optional[str] = None) -> Bundle:
 
     out = directory or resolve_bundle_dir(cfg)
     df = load_papers(out)
-    embeddings = np.load(os.path.join(out, EMBEDDINGS_NPY), mmap_mode="r")
+    emb_path = os.path.join(out, EMBEDDINGS_NPY)
+    # Memory-mapping locks the file on Windows, so only do it when it saves real memory.
+    big = os.path.getsize(emb_path) > _MMAP_MIN_BYTES
+    embeddings = np.load(emb_path, mmap_mode="r" if big else None)
     labels = df["cluster_id"].to_numpy().astype(int)
     clusters_meta = {int(k): v for k, v in load_json(os.path.join(out, CLUSTERS_JSON)).items()}
     growth = load_json(os.path.join(out, GROWTH_JSON))

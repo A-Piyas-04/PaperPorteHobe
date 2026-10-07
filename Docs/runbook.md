@@ -45,7 +45,12 @@ The stages cache their outputs, so you can rerun from the point that changed:
 python pipeline/run_pipeline.py --stage validate          # re-score only
 python pipeline/run_pipeline.py --from-stage analyze      # re-cluster + everything after
 python pipeline/run_pipeline.py --no-publish              # build and validate, don't publish
+python pipeline/run_pipeline.py --stage publish --force-publish   # publish despite failed gates
 ```
+
+`--force-publish` is for deliberate exceptions (for example, a search gate
+measured only against heuristic grades). The release manifest records
+`validation.gates_overridden: true` so the override is visible later.
 
 ## Rolling back
 

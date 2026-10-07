@@ -151,13 +151,18 @@ def build_changelog(cfg: Config, staging: str, previous: Optional[str], meta: Di
     return summary
 
 
-def publish(cfg: Config, meta: Dict, report: Dict, staging: Optional[str] = None) -> Optional[str]:
+def publish(cfg: Config, meta: Dict, report: Dict, staging: Optional[str] = None,
+            force: bool = False) -> Optional[str]:
     gates = report.get("gates", {})
+    overridden = False
     if not gates.get("passed", False):
         msg = f"Validation gates failed: {gates.get('failed_required')}"
-        if cfg["validation"]["enforce_gates"]:
-            raise PublishError(msg + " — refusing to publish (validation.enforce_gates is true).")
-        log.warning("%s — publishing anyway (gates are advisory in this config).", msg)
+        if cfg["validation"]["enforce_gates"] and not force:
+            raise PublishError(msg + " — refusing to publish (validation.enforce_gates is true; "
+                               "use --force-publish to override).")
+        overridden = bool(cfg["validation"]["enforce_gates"])
+        log.warning("%s — publishing anyway (%s).", msg,
+                    "forced with --force-publish" if overridden else "gates are advisory in this config")
     if not cfg["release"]["enabled"]:
         return None
     staging = staging or cfg.processed_dir
@@ -165,7 +170,9 @@ def publish(cfg: Config, meta: Dict, report: Dict, staging: Optional[str] = None
     target = os.path.join(cfg.releases_dir, rid)
     previous = current_release(cfg)
     shutil.copytree(staging, target)
-    save_json(build_manifest(cfg, rid, meta, report), os.path.join(target, "manifest.json"))
+    manifest = build_manifest(cfg, rid, meta, report)
+    manifest["validation"]["gates_overridden"] = overridden
+    save_json(manifest, os.path.join(target, "manifest.json"))
     save_json(build_changelog(cfg, target, previous, meta), os.path.join(target, "changelog.json"))
     for name in ("validation_report.json", "validation_report.md"):
         src = os.path.join(cfg.reports_dir, name)

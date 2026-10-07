@@ -299,7 +299,7 @@ def stage_publish(ctx: Context) -> None:
         meta = dict(meta)
         meta["stage_timings"] = {**meta.get("stage_timings", {}), **ctx.timings}
         save_json(meta, os.path.join(cfg.processed_dir, "meta.json"))
-        rid = publish(cfg, meta, report)
+        rid = publish(cfg, meta, report, force=bool(ctx.data.get("force_publish")))
         ctx.data["release"] = rid
         info.update(release=rid)
 
@@ -308,12 +308,14 @@ _FUNCS = {"ingest": stage_ingest, "enrich": stage_enrich, "embed": stage_embed,
           "analyze": stage_analyze, "validate": stage_validate, "publish": stage_publish}
 
 
-def run(cfg: Config, progress: ProgressFn = None, stages: Optional[List[str]] = None) -> Tuple[Dict, Dict]:
+def run(cfg: Config, progress: ProgressFn = None, stages: Optional[List[str]] = None,
+        force_publish: bool = False) -> Tuple[Dict, Dict]:
     """Run ``stages`` (default: all). Returns ``(meta, validation_report)``."""
     configure_logging(cfg["monitoring"]["json_logs"])
     set_seed(cfg["seed"])
     stages = stages or STAGES
     ctx = Context(cfg)
+    ctx.data["force_publish"] = force_publish
     t0 = time.time()
     log.info("ScholarGrid v%s | env=%s | stages=%s | backends available: %s",
              __version__, cfg["environment"], stages, capabilities())
@@ -340,6 +342,8 @@ def main(argv: Optional[List[str]] = None) -> None:
     group.add_argument("--stage", choices=STAGES, help="run a single stage")
     group.add_argument("--from-stage", choices=STAGES, help="run this stage and the ones after it")
     p.add_argument("--no-publish", action="store_true", help="skip the publish stage")
+    p.add_argument("--force-publish", action="store_true",
+                   help="publish even if required validation gates fail (recorded in the manifest)")
     args = p.parse_args(argv)
 
     cfg = load_config(args.config)
@@ -353,7 +357,7 @@ def main(argv: Optional[List[str]] = None) -> None:
     if args.no_publish and "publish" in stages:
         stages.remove("publish")
     try:
-        meta, report = run(cfg, stages=stages)
+        meta, report = run(cfg, stages=stages, force_publish=args.force_publish)
     except Exception as exc:
         capture_exception(exc)
         raise

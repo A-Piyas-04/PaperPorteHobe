@@ -155,9 +155,19 @@ def _dbcv(reduced: np.ndarray, labels: np.ndarray, sample: int = 3000) -> Option
     except Exception:
         return None
     rng = np.random.default_rng(0)
-    idx = np.where(labels != -1)[0]
-    if len(idx) > sample:
-        idx = rng.choice(idx, size=sample, replace=False)
+    clusters = [c for c in np.unique(labels) if c != -1]
+    if not clusters:
+        return None
+    # hdbscan's validity index breaks on clusters with < 2 sampled points, so sample per cluster.
+    per = max(5, sample // len(clusters))
+    parts = []
+    for c in clusters:
+        members = np.where(labels == c)[0]
+        if len(members) >= 2:
+            parts.append(rng.choice(members, size=min(per, len(members)), replace=False))
+    if not parts:
+        return None
+    idx = np.concatenate(parts)
     sub_labels = labels[idx]
     if len(set(sub_labels.tolist())) < 2:
         return None

@@ -69,6 +69,16 @@ def test_publish_refuses_failing_gates_when_enforced(cfg):
     assert resolve_bundle_dir(cfg) == cfg.processed_dir
 
 
+def test_force_publish_overrides_and_is_recorded(cfg):
+    import json
+
+    _stage_bundle(cfg)
+    cfg.raw["validation"]["enforce_gates"] = True
+    rid = publish(cfg, {}, {"gates": {"passed": False, "failed_required": ["search_ndcg_at_10"]}}, force=True)
+    with open(os.path.join(cfg.releases_dir, rid, "manifest.json"), encoding="utf-8") as fh:
+        assert json.load(fh)["validation"]["gates_overridden"] is True
+
+
 def test_missing_pin_is_an_error(cfg):
     cfg.raw["release"]["pin"] = "1999.01.01"
     with pytest.raises(FileNotFoundError):
