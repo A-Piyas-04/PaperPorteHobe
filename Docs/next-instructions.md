@@ -52,7 +52,7 @@ Set-Location ../../../..
 To use an already installed Microsoft Edge locally, set
 `$env:PLAYWRIGHT_CHANNEL='msedge'` before `npm test`. CI installs Chromium.
 
-Try the tour (including Skip, Back and replay), submit a search, save and remove papers, export the reading list, open results in the workspace, select related papers, and repeat at a narrow phone width. The reading list and tour state last for the current Streamlit session. Export before closing or reloading.
+Try the tour (including Skip, Back and replay), submit a search, save and remove papers, export the reading list, and open the Workspace. In the Workspace, use the **Map**: from the overview click an area bubble, click a paper to see its neighbourhood and details, use *Focus this paper's connections* / *+ Expand*, and the zoom / Fit / Overview controls; confirm hovering only shows a tooltip and never changes the selection or camera, and that saving a paper keeps the selection and viewport. Switch to the **List** view for keyboard selection and filtering, select related papers, and repeat at a narrow phone width (the map uses a bottom-sheet for details). The reading list and tour state last for the current Streamlit session. Export before closing or reloading.
 
 ## Data and deployment
 

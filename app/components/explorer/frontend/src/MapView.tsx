@@ -144,9 +144,9 @@ export default function MapView(props: Props) {
         labelSize: 12,
         labelWeight: "600",
         labelColor: { color: "#2b313c" },
-        labelDensity: 0.8,
-        labelGridCellSize: 120,
-        labelRenderedSizeThreshold: 10,
+        labelDensity: 1,
+        labelGridCellSize: 75,
+        labelRenderedSizeThreshold: 6,
         zIndex: true,
         minCameraRatio: 0.05,
         maxCameraRatio: 3,
@@ -154,10 +154,9 @@ export default function MapView(props: Props) {
         nodeReducer: (node, attrs) => {
           const s = st.current;
           const res: Record<string, unknown> = { ...attrs };
-          if (s.scene.kind === "areas") {
-            res.forceLabel = true;
-            return res;
-          }
+          // Areas keep Sigma's collision-aware labelling (no forced labels),
+          // so the overview stays readable; hover shows any hidden name.
+          if (s.scene.kind === "areas") return res;
           if (s.selected === null) return res;
           const sel = String(s.selected);
           if (node === sel) {

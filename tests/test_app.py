@@ -1,5 +1,6 @@
 """Streamlit smoke tests: every page renders against a freshly built bundle."""
 import os
+import sys
 import textwrap
 
 import pytest
@@ -100,3 +101,47 @@ def test_empty_area_filter(app_config, tmp_path):
     at.text_input[0].input("nonexistent-area-xyz").run()
     assert any("No areas match" in info.value for info in at.info)
     assert not at.exception
+
+
+def _import_explore():
+    for p in (APP_DIR, ROOT):
+        if p not in sys.path:
+            sys.path.insert(0, p)
+    import ui
+    from views import explore
+    return ui, explore
+
+
+def test_map_payload_has_overview_and_counts(app_config):
+    """The map payload exposes aggregated areas, centroids and honest counts."""
+    ui, explore = _import_explore()
+    ui.get_bundle.clear()
+    payload, pos = explore._payload(ui.bundle_version())
+    n = len(ui.get_bundle().df)
+    assert payload["corpusTotal"] == n
+    assert payload["renderedTotal"] == len(pos)
+    assert payload["maxAreaPapers"] >= 10
+    assert isinstance(payload["areaEdges"], list)
+    # Overview bubbles carry a rendered count and an embedding centroid.
+    located = [a for a in payload["areas"] if a.get("rc")]
+    assert located, "expected at least one area with rendered papers"
+    assert all("x" in a and "y" in a for a in located)
+    # Aggregated area links never connect an area to itself.
+    assert all(a != b for a, b, _ in payload["areaEdges"])
+
+
+def test_search_match_outside_sample_stays_accessible(app_config):
+    """A required (search-matched) paper is added even when the sample is tiny."""
+    ui, explore = _import_explore()
+    cfg = ui.get_config()
+    original = cfg["app"]["max_graph_nodes"]
+    cfg["app"]["max_graph_nodes"] = 5  # force heavy sampling
+    try:
+        n = len(ui.get_bundle().df)
+        target = n - 1  # most-recent-indexed paper, unlikely in a tiny sample
+        payload, pos = explore._payload(ui.bundle_version(), required=(target,))
+        assert target in pos, "a search match must remain reachable on the map"
+        local = pos[target]
+        assert any(p["i"] == local for p in payload["papers"])
+    finally:
+        cfg["app"]["max_graph_nodes"] = original
