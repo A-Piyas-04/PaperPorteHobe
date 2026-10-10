@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Area, Payload } from "./types";
-import { arxivUrl, authorList, doiUrl, fmtDate, fmtInt, pct, pdfUrl, shortAuthors } from "./util";
+import { arxivUrl, authorList, fmtDate, fmtInt, pdfUrl, shortAuthors } from "./util";
 
 interface Props {
   data: Payload;
@@ -21,7 +21,8 @@ function Overview({ data, areaFilter, onArea }: Props) {
   return (
     <div className="detail fade-in">
       <div className="eyebrow">Overview</div>
-      <h2 className="detail-title">Pick a paper to see how it connects</h2>
+      <h2 className="detail-title">Your next read starts here</h2>
+      <p>Choose a title from the paper list. Read its abstract, open the original on arXiv, then follow related papers to understand the area.</p>
       <div className="stats">
         <div><b>{fmtInt(data.papers.length)}</b><span>papers</span></div>
         <div><b>{data.areas.length}</b><span>areas</span></div>
@@ -101,12 +102,12 @@ export default function DetailPane(props: Props) {
         <div className="actions">
           <a className="btn primary" href={arxivUrl(p.id)} target="_blank" rel="noopener noreferrer">Open on arXiv</a>
           <a className="btn" href={pdfUrl(p.id)} target="_blank" rel="noopener noreferrer">PDF</a>
-          <a className="btn" href={doiUrl(p.id)} target="_blank" rel="noopener noreferrer">DOI</a>
         </div>
 
         {nbrs.length > 0 && (
           <>
-            <div className="section-title">Most similar papers</div>
+            <div className="section-title">Continue with related papers</div>
+            <p className="muted">Connections use text similarity and may include shared references. They do not establish a research gap.</p>
             <div className="similar">
               {nbrs.map(([j, s]) => {
                 const q = data.papers[j];
@@ -122,7 +123,7 @@ export default function DetailPane(props: Props) {
                     <span className="dot" style={{ background: qa?.color ?? "#cfd3da" }} />
                     <span className="sim-body">
                       <span className="sim-title">{q.t}</span>
-                      <span className="sim-meta">{shortAuthors(q)} · {pct(s)} similar</span>
+                      <span className="sim-meta">{shortAuthors(q)} · similarity score {s.toFixed(2)}</span>
                     </span>
                   </button>
                 );

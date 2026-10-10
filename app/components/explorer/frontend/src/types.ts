@@ -42,7 +42,7 @@ export interface Args {
   data: Payload | null;
   highlight: Highlight | null;
   focus_area: number | null;
-  select: string | null;
+  select: number | null;
   height: number;
 }
 

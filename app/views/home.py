@@ -39,38 +39,42 @@ def render() -> None:
 
 # ---------------------------------------------------------------------------
 def _landing(bundle) -> None:
-    meta = bundle.meta
+    from views import tour
+
     with ui.panel("hero"):
         st.markdown(
-            "<div class='sg-eyebrow'>Research landscape explorer</div>"
-            "<div class='sg-title'>Find the papers that matter.</div>"
-            "<p class='sg-lead'>Describe a topic in plain words. We'll find the closest "
-            "arXiv papers and show where they sit in the field.</p>",
+            "<div class='sg-eyebrow'>A clearer way into computer-science research</div>"
+            "<h1 class='sg-title'>From a research interest<br>to your next useful read.</h1>"
+            "<p class='sg-lead'>Find relevant papers, understand the areas around them, "
+            "and build a reading list you can take into your next project or discussion.</p>",
             unsafe_allow_html=True)
-        st.text_input("Search", key="q", label_visibility="collapsed", max_chars=ui.max_query_chars(),
-                      placeholder="e.g. efficient attention for long documents")
-        st.markdown("<div style='height:.6rem'></div>", unsafe_allow_html=True)
-        st.caption("Popular searches")
+        with st.form("start-search"):
+            st.text_input("What would you like to understand?", key="q", max_chars=ui.max_query_chars(),
+                          placeholder="e.g. how to make language models more efficient")
+            submitted = st.form_submit_button("Find papers", type="primary", use_container_width=True)
+        if submitted and st.session_state.q.strip():
+            st.rerun()
+        st.caption("Or start with an example")
         cols = st.columns(3)
-        for i, ex in enumerate(ui.EXAMPLES):
-            cols[i % 3].button(ex, key=f"ex_{i}", use_container_width=True,
-                               on_click=_set_query, args=(ex,))
+        for i, ex in enumerate(ui.EXAMPLES[:3]):
+            cols[i].button(ex, key=f"ex_{i}", use_container_width=True,
+                           on_click=_set_query, args=(ex,))
 
-    with ui.panel("glance"):
-        ui.panel_header("At a glance")
-        snap = meta.get("snapshot", {})
-        ui.stat_tiles([
-            (f"{meta['counts']['papers']:,}", "Papers"),
-            (meta["counts"]["clusters"], "Research areas"),
-            (len(bundle.sparse_leads), "Investigation leads"),
-            (ui.fmt_date(snap.get("latest_included_date")), "Latest paper"),
-        ])
-        st.markdown("<div style='height:1.2rem'></div>", unsafe_allow_html=True)
-        c1, c2, _ = st.columns([1, 1, 1.4])
-        if c1.button("Open the explorer", type="primary", use_container_width=True):
+    st.markdown("<div class='sg-journey'>"
+                "<div><b>01 ? Find your starting point</b><p>Search an interest or browse a research area.</p></div>"
+                "<div><b>02 ? Understand the context</b><p>Read abstracts and follow related papers.</p></div>"
+                "<div><b>03 ? Leave with a reading list</b><p>Save useful papers and export your references.</p></div>"
+                "</div>", unsafe_allow_html=True)
+    tour.render()
+    with ui.panel("start-browsing"):
+        ui.panel_header("Still choosing a topic?")
+        st.write("Browse readable research areas, then open a paper that interests you.")
+        if st.button("Browse research areas", use_container_width=True):
             ui.goto("explore")
-        if c2.button("Browse areas", use_container_width=True):
-            ui.goto("areas")
+    snap = bundle.meta.get("snapshot", {})
+    st.caption(f"Searching {len(bundle.df):,} papers across {len(bundle.clusters_meta)} areas ? "
+               f"Latest included paper: {ui.fmt_date(snap.get('latest_included_date'))}. "
+               "Results reflect this dataset, not all published research.")
 
 
 def _filters(bundle) -> tuple[tuple, str, float]:
@@ -165,7 +169,7 @@ def _results(bundle, query: str) -> None:
                 unsafe_allow_html=True)
             items = [[int(i), round(float(r["score"]), 4)]
                      for i, r in zip(res["result_indices"], res["results"])]
-            if a.button("See the graph", type="primary", use_container_width=True,
+            if a.button("Explore results", type="primary", use_container_width=True,
                         on_click=_open_in_explore, args=(query, items)):
                 ui.goto("explore")
             pills = [f"{ui.area_name(clusters, d['cluster_id'])} · {d['count']}"
@@ -177,14 +181,20 @@ def _results(bundle, query: str) -> None:
             ui.note("<b>No papers matched.</b> Try fewer filters or different words.")
             return
 
+        st.caption("Start with a title that fits your question. Read the original, explore related work, or save it for later.")
+        from views.library import toggle
+
         with slot.container():
             for i, (r, idx) in enumerate(zip(res["results"], res["result_indices"])):
                 ui.paper_card(
                     r["title"], r["arxiv_id"], category=r["primary_category"],
                     date=r["date"], area=ui.area_name(clusters, r["cluster_id"]),
-                    score=r["score"],
+                    score=None,
                     snippet=ui.abstract_snippet(df.iloc[int(idx)].get("abstract")),
                     terms=r.get("matched_terms", []), delay=i)
+                saved = r["arxiv_id"] in st.session_state.get("saved_papers", {})
+                st.button("Remove from reading list" if saved else "Save to reading list",
+                          key=f"save_{r['arxiv_id']}_{i}", on_click=toggle, args=(r["arxiv_id"],))
                 st.button("More like this", key=f"like_{r['arxiv_id']}_{i}", type="tertiary",
                           on_click=_set_query, args=(f"{_LIKE}{r['arxiv_id']}",))
 

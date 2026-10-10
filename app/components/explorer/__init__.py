@@ -1,4 +1,4 @@
-"""Paper-graph explorer: a custom Streamlit component (React + sigma.js).
+"""Research workspace: a custom Streamlit component (React).
 
 Release mode serves the prebuilt bundle in ``frontend/dist``. Set
 ``SCHOLARGRID_DEV=1`` and run ``npm run dev`` in ``frontend/`` to load the
@@ -26,7 +26,7 @@ def is_built() -> bool:
 
 
 def explorer(data: Dict[str, Any], *, highlight: Optional[Dict] = None,
-             focus_area: Optional[int] = None, select: Optional[str] = None,
+             focus_area: Optional[int] = None, select: Optional[int] = None,
              height: int = 780, key: str = "explorer") -> Optional[Dict]:
     """Render the explorer. Returns the latest event dict sent by the UI
     (``{"type": "search", "q": ..., "nonce": ...}`` etc.) or ``None``."""

@@ -1,12 +1,6 @@
-"""Explore — the paper graph (list | graph | details), Connected Papers style.
+"""Readable area and paper workspace, backed by a bounded React payload.
 
-The heavy lifting happens client-side in the ``explorer`` React component.
-This page only builds the payload once, runs semantic search when the
-component asks for it, and hands requests (area pages) back to Streamlit.
-
-Large corpora are capped at ``app.max_graph_nodes`` papers, sampled per area
-(most-cited first), and re-indexed so the component's positional indices stay
-valid; search highlights are mapped onto the rendered subset.
+Search covers the full corpus; matches are added to the browsing sample.
 """
 from __future__ import annotations
 
@@ -48,11 +42,13 @@ def _select_nodes(bundle, cap: int) -> np.ndarray:
 
 
 @st.cache_resource(show_spinner=False)
-def _payload(version: str) -> tuple[dict, dict]:
+def _payload(version: str, required: tuple[int, ...] = ()) -> tuple[dict, dict]:
     bundle = ui.get_bundle()
     df, clusters = bundle.df, bundle.clusters_meta
     colors = ui.area_colors(clusters)
     keep = _select_nodes(bundle, int(ui.get_config()["app"]["max_graph_nodes"]))
+    # Search matches must remain accessible even outside the overview sample.
+    keep = np.union1d(keep, [i for i in required if 0 <= i < len(df)]).astype(int)
     pos = {int(orig): p for p, orig in enumerate(keep)}
 
     papers = []
@@ -124,7 +120,9 @@ def render() -> None:
         return
 
     bundle = ui.get_bundle()
-    payload, pos = _payload(ui.bundle_version())
+    hl = st.session_state.get("explore_hl") or {}
+    required = tuple(int(i) for i, _ in hl.get("items", []))
+    payload, pos = _payload(ui.bundle_version(), required)
     if len(pos) < len(bundle.df):
         st.caption(f"Showing {len(pos):,} of {len(bundle.df):,} papers (most-cited per area). "
                    "Search still covers every paper.")

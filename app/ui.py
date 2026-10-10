@@ -305,6 +305,20 @@ _CSS = """
                     overflow: hidden; margin-top: .6rem; }
   .sg-splash .bar span { display: block; width: 40%; height: 100%; background: var(--accent);
                          border-radius: 999px; animation: sgSlide 1.1s ease-in-out infinite; }
+
+  .sg-brand-sub { margin-left: 1rem; font-weight: 400; font-size: .9rem; color: var(--muted); }
+  .sg-journey { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin: 1rem 0 2rem; }
+  .sg-journey > div { border-top: 2px solid #c4d5ee; padding-top: 16px; }
+  .sg-journey p { color: var(--muted); margin-top: 8px; }
+  .sg-title { max-width: 850px; font-size: clamp(2rem, 4vw, 3.5rem); line-height: 1.15; }
+  .sg-card:hover { transform: none; box-shadow: none; }
+  .st-key-panel-hero { padding-top: 2.5rem; }
+  @media (max-width: 700px) {
+    .sg-journey { grid-template-columns: 1fr; gap: 12px; }
+    .sg-brand-sub { display: none; }
+    div[class*="st-key-panel-"] { padding: 1.25rem; }
+    .st-key-topnav { position: static; }
+  }
 </style>
 """
 
@@ -505,15 +519,20 @@ def fmt_date(d) -> str:
 # Navigation
 # ---------------------------------------------------------------------------
 def render_top_nav(pages: dict) -> None:
-    order = ["home", "explore", "areas", "trends", "leads", "about"]
     with st.container(key="topnav"):
-        cols = st.columns([2.4, 1, 1, 1, 1, 1, 1], gap="small",
-                          vertical_alignment="center")
-        cols[0].markdown("<div class='sg-brand'>🔭 ScholarGrid</div>",
-                         unsafe_allow_html=True)
-        for col, key in zip(cols[1:], order):
-            if key in pages:
-                col.page_link(pages[key])
+        st.markdown("<div class='sg-brand'>ScholarGrid <span class='sg-brand-sub'>Research, with direction.</span></div>",
+                    unsafe_allow_html=True)
+        primary, secondary = st.columns([4, 1])
+        with primary:
+            cols = st.columns(3, gap="small")
+            for col, key in zip(cols, ["home", "explore", "library"]):
+                if key in pages:
+                    col.page_link(pages[key])
+        with secondary, st.popover("More", use_container_width=True):
+            for key in ["areas", "trends", "leads", "about"]:
+                if key in pages:
+                    st.page_link(pages[key])
+            st.caption("Start with Find papers. Use these tools when you want deeper context.")
 
 
 def goto(key: str) -> None:
@@ -616,7 +635,7 @@ def paper_card(title: str, arxiv_id: str, *, category: str | None = None,
     if area:
         chips += f"<span class='sg-chip area'>{html.escape(area)}</span>"
     if score is not None:
-        chips += f"<span class='sg-score'>{score:.0%} match</span>"
+        chips += f"<span class='sg-score'>Ranking score {score:.3f}</span>"
     body = (
         f"<div class='sg-card' style='animation-delay:{min(delay, 12) * 45}ms'>"
         f"<div class='t'><a href='https://arxiv.org/abs/{html.escape(str(arxiv_id))}' "

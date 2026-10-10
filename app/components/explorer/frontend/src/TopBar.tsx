@@ -40,6 +40,7 @@ export default function TopBar(props: Props) {
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search a topic, method or problem"
           aria-label="Search papers"
+          maxLength={300}
         />
         {props.query && (
           <button type="button" className="ghost" onClick={() => { setQ(""); props.onClear(); }}>
@@ -47,7 +48,7 @@ export default function TopBar(props: Props) {
           </button>
         )}
         <button type="submit" className="primary" disabled={props.pending || !q.trim()}>
-          {props.pending ? <span className="btn-spin" /> : "Search"}
+          {props.pending ? "Searching…" : "Search"}
         </button>
       </form>
 
@@ -85,8 +86,6 @@ export default function TopBar(props: Props) {
         ) : (
           <span><b>{fmtInt(props.visibleCount)}</b> papers</span>
         )}
-        <span className="sep">·</span>
-        <span>{fmtInt(data.edges.length)} links</span>
       </div>
     </div>
   );

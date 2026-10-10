@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Paper } from "./types";
-import { fmtDate, pct, shortAuthors } from "./util";
+import { fmtDate, shortAuthors } from "./util";
 
 export interface ListItem {
   i: number;
@@ -20,7 +20,7 @@ interface Props {
   onSelect: (i: number) => void;
 }
 
-const PAGE = 60;
+const PAGE = 20;
 
 export default function PaperList(props: Props) {
   const [limit, setLimit] = useState(PAGE);
@@ -55,6 +55,7 @@ export default function PaperList(props: Props) {
                   key={it.i}
                   data-i={it.i}
                   className={cls.join(" ")}
+                  aria-pressed={it.i === props.selected}
                   style={{ animationDelay: `${Math.min(k, 14) * 22}ms`, borderLeftColor: props.colors.get(p.c) ?? "#cfd3da" }}
                   onMouseEnter={() => props.onHover(it.i)}
                   onMouseLeave={() => props.onHover(null)}
@@ -67,7 +68,7 @@ export default function PaperList(props: Props) {
                     <span>{fmtDate(p.d)}</span>
                     <span className="row-right">
                       {it.score !== undefined
-                        ? <span className="match">{pct(it.score)} match</span>
+                        ? <span className="match">Rank {k + 1}</span>
                         : p.ci > 0
                           ? <span>{p.ci} cites</span>
                           : <span>{props.degree[it.i]} links</span>}

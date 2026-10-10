@@ -40,6 +40,11 @@ def _grid(bundle) -> None:
                    f"{len(clusters)} topics found in the papers, largest first.")
 
     items = sorted(clusters.values(), key=lambda c: -c.get("size", 0))
+    query = st.text_input("Find an area", placeholder="Filter by topic or keyword…").strip().casefold()
+    items = [c for c in items if query in (ui.area_name(clusters, c["cluster_id"]) + " "
+                                         + " ".join(c.get("keywords", []))).casefold()]
+    if not items:
+        st.info("No areas match. Try a broader topic or clear the filter.")
     delays = "".join(f".st-key-card-{int(c['cluster_id'])}{{animation-delay:{min(i, 15) * 40}ms}}"
                      for i, c in enumerate(items))
     st.markdown(f"<style>{delays}</style>", unsafe_allow_html=True)
@@ -83,7 +88,7 @@ def _detail(bundle, cid: int) -> None:
             f"{ui.keyword_pills(info.get('keywords', [])[:10])}",
             unsafe_allow_html=True)
         c1, _ = st.columns([1, 2.5])
-        if c1.button("Open in Explore", type="primary", use_container_width=True):
+        if c1.button("Browse papers in this area", type="primary", use_container_width=True):
             st.session_state["focus_cluster"] = cid
             st.session_state["explore_hl"] = None
             ui.goto("explore")
