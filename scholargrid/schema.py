@@ -6,9 +6,11 @@ Unknown keys are rejected inside known sections.
 """
 from __future__ import annotations
 
-from typing import Dict, List, Literal, Optional, Union
+from typing import Dict, List, Literal, Optional, Union, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+
+LiveSource = Literal["arxiv", "openalex", "semantic_scholar"]
 
 
 class _Section(BaseModel):
@@ -183,8 +185,8 @@ class Search(_Section):
     proximity_window: int = Field(default=8, ge=2)
     synonyms: Dict[str, List[str]] = Field(default_factory=dict)
     live: bool = True
-    live_sources: List[Literal["arxiv", "openalex", "semantic_scholar"]] = Field(
-        default_factory=lambda: ["arxiv", "openalex", "semantic_scholar"])
+    live_sources: List[LiveSource] = Field(
+        default_factory=lambda: list(get_args(LiveSource)))
     live_per_source: int = Field(default=200, ge=1)
     live_deadline_s: float = Field(default=10.0, gt=0)
     s2_budget_s: float = Field(default=6.0, gt=0)

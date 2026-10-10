@@ -149,7 +149,7 @@ class LiveStore:
         self.dim = dim
         self.lock = threading.RLock()
         self.df = pd.DataFrame(columns=COLUMNS)
-        self.vectors = np.zeros((0, dim or 1), dtype=np.float32)
+        self.vectors: np.ndarray = np.zeros((0, dim or 1), dtype=np.float32)
         self.phrase = PhraseIndex([], [])
         self.keys = KeyIndex()
         self.acronyms: Dict = {}
@@ -181,7 +181,7 @@ class LiveStore:
         df = _typed(df)
         same_model = (meta.get("fingerprint") == fingerprint and vectors is not None
                       and len(vectors) == len(df) and (dim is None or vectors.shape[1] == dim))
-        if not same_model:
+        if not same_model or vectors is None:
             if len(df):
                 log.info("Live store vectors belong to %s, not %s; they will be re-embedded.",
                          meta.get("fingerprint"), fingerprint)
@@ -296,7 +296,9 @@ class LiveStore:
         return {**r.to_dict(), "sources": [s for s in str(r["sources"]).split(";") if s]}
 
     def find_row(self, paper_id: str) -> Optional[int]:
-        hits = np.flatnonzero(self.df["paper_id"].to_numpy() == paper_id) if len(self.df) else []
+        if not len(self.df):
+            return None
+        hits = np.flatnonzero(self.df["paper_id"].to_numpy() == paper_id)
         return int(hits[0]) if len(hits) else None
 
 

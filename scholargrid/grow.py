@@ -34,7 +34,7 @@ def _now() -> str:
 def _alive(pid: int) -> bool:
     if pid <= 0:
         return False
-    if os.name == "nt":
+    if sys.platform == "win32":
         import ctypes
 
         kernel32 = ctypes.windll.kernel32
@@ -45,6 +45,12 @@ def _alive(pid: int) -> bool:
         ok = kernel32.GetExitCodeProcess(handle, ctypes.byref(code))
         kernel32.CloseHandle(handle)
         return bool(ok) and code.value == 259  # STILL_ACTIVE
+    try:
+        # A finished child stays a zombie (and passes kill(0)) until it is reaped.
+        if os.waitpid(pid, os.WNOHANG)[0] == pid:
+            return False
+    except ChildProcessError:
+        pass
     try:
         os.kill(pid, 0)
     except OSError:
@@ -94,7 +100,7 @@ def start(cfg: Config, extra_args: Optional[list] = None) -> Dict:
     ensure_dir(os.path.dirname(path) or ".")
     kwargs: Dict = {"cwd": REPO_ROOT, "stderr": subprocess.STDOUT, "stdin": subprocess.DEVNULL,
                     "close_fds": True}
-    if os.name == "nt":
+    if sys.platform == "win32":
         kwargs["creationflags"] = (subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
                                    | subprocess.CREATE_NO_WINDOW)
     else:
