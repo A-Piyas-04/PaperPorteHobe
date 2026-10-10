@@ -39,7 +39,7 @@ jobs:
         run: python pipeline/run_pipeline.py
       - name: Upload validation report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: refresh-report-${{ github.run_id }}
           path: reports/
