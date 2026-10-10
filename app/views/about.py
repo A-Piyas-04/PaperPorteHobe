@@ -10,7 +10,7 @@ _STEPS = [
     ("Embed", "Each title and abstract becomes a vector ({embedding}). Your searches use the same model."),
     ("Group", "Similar papers are grouped into research areas ({reduce} → {cluster})."),
     ("Name", "Each area is named from its most distinctive keywords."),
-    ("Connect", "Papers are laid out in 2D ({landscape}) and linked to their most similar neighbours."),
+    ("Connect", "Related papers are connected by text similarity, with shared-reference signals when available. Browse these connections one paper at a time."),
     ("Check", "Search quality, cluster quality and robustness are validated on every run."),
 ]
 
@@ -36,8 +36,8 @@ def render() -> None:
     with ui.panel("limits"):
         ui.panel_header("Keep in mind")
         st.markdown("""
-- The graph is a **picture, not proof**. Distances and links can mislead.
-- **Citations lag.** Very recent papers have few or none yet, so node size uses links instead.
+- Research areas are **automatic groupings, not an authoritative taxonomy**. Check the papers behind each label.
+- **Citations lag.** Very recent papers have few or none yet. A zero count may also reflect missing metadata.
 - **Quiet ≠ new.** A sparse spot may just mean few papers were collected.
 - **More papers ≠ better research.** Activity is not quality.
 - **Growth needs history.** Areas are only called growing when the evidence is strong enough;

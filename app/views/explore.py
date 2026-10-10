@@ -41,7 +41,7 @@ def _select_nodes(bundle, cap: int) -> np.ndarray:
     return np.sort(np.concatenate(picks)[:cap])
 
 
-@st.cache_resource(show_spinner=False)
+@st.cache_resource(show_spinner=False, max_entries=4)
 def _payload(version: str, required: tuple[int, ...] = ()) -> tuple[dict, dict]:
     bundle = ui.get_bundle()
     df, clusters = bundle.df, bundle.clusters_meta
@@ -132,7 +132,9 @@ def render() -> None:
         select = pos.get(int(select))
 
     event = explorer(payload, highlight=_remap(st.session_state.get("explore_hl"), pos),
-                     focus_area=focus, select=select, key="explorer")
+                     focus_area=focus, select=select,
+                     height=960,
+                     saved_ids=list(st.session_state.get("saved_papers", {})), key="explorer")
 
     if not event or event.get("nonce") == st.session_state.get("_explore_nonce"):
         return
@@ -147,3 +149,8 @@ def render() -> None:
     elif kind == "open_area" and event.get("id") is not None:
         st.session_state["area_open"] = int(event["id"])
         ui.goto("areas")
+    elif kind == "save" and event.get("id"):
+        from views.library import toggle
+
+        toggle(str(event["id"]))
+        st.rerun()

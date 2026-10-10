@@ -29,10 +29,5 @@ export function fmtInt(n: number): string {
   return n.toLocaleString("en-US");
 }
 
-export function pct(score: number): string {
-  return `${Math.round(Math.max(0, Math.min(1, score)) * 100)}%`;
-}
-
 export const arxivUrl = (id: string) => `https://arxiv.org/abs/${id}`;
 export const pdfUrl = (id: string) => `https://arxiv.org/pdf/${id}`;
-export const doiUrl = (id: string) => `https://doi.org/10.48550/arXiv.${id}`;

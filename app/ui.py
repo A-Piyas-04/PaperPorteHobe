@@ -318,6 +318,11 @@ _CSS = """
     .sg-brand-sub { display: none; }
     div[class*="st-key-panel-"] { padding: 1.25rem; }
     .st-key-topnav { position: static; }
+    .st-key-topnav [data-testid="stHorizontalBlock"] { flex-wrap: nowrap !important; gap: .25rem !important; }
+    .st-key-topnav [data-testid="stColumn"] { min-width: 0 !important; width: auto !important; flex: 1 1 0 !important; }
+    .st-key-topnav [data-testid="stPageLink"] a { padding: .5rem .2rem; }
+    .st-key-topnav [data-testid="stPageLink"] a p { font-size: .8rem !important; }
+    .st-key-topnav [data-testid="stIconMaterial"] { display: none; }
   }
 </style>
 """
@@ -522,13 +527,11 @@ def render_top_nav(pages: dict) -> None:
     with st.container(key="topnav"):
         st.markdown("<div class='sg-brand'>ScholarGrid <span class='sg-brand-sub'>Research, with direction.</span></div>",
                     unsafe_allow_html=True)
-        primary, secondary = st.columns([4, 1])
-        with primary:
-            cols = st.columns(3, gap="small")
-            for col, key in zip(cols, ["home", "explore", "library"]):
-                if key in pages:
-                    col.page_link(pages[key])
-        with secondary, st.popover("More", use_container_width=True):
+        cols = st.columns([1.2, 1.2, 1.2, .8], gap="small")
+        for col, key in zip(cols[:3], ["home", "explore", "library"]):
+            if key in pages:
+                col.page_link(pages[key])
+        with cols[3], st.popover("More", use_container_width=True):
             for key in ["areas", "trends", "leads", "about"]:
                 if key in pages:
                     st.page_link(pages[key])

@@ -10,7 +10,7 @@ from scholargrid.pipeline import run
 
 AppTest = pytest.importorskip("streamlit.testing.v1").AppTest
 APP_DIR = os.path.join(ROOT, "app")
-PAGES = ["home", "areas", "trends", "leads", "about", "explore"]
+PAGES = ["home", "areas", "trends", "leads", "about", "explore", "library"]
 
 
 @pytest.fixture(scope="module")
@@ -61,3 +61,42 @@ def test_full_app_shell(app_config):
     at = AppTest.from_file(os.path.join(APP_DIR, "streamlit_app.py"), default_timeout=120)
     at.run()
     assert not at.exception, at.exception
+
+
+def _button(at, label):
+    return next(b for b in at.button if b.label == label)
+
+
+def test_tour_skip_restart_and_complete(app_config, tmp_path):
+    at = AppTest.from_file(_script(tmp_path, "home"), default_timeout=120).run()
+    _button(at, "Next").click().run()
+    assert at.session_state["tour_step"] == 1
+    _button(at, "Back").click().run()
+    assert at.session_state["tour_step"] == 0
+    _button(at, "Skip tour").click().run()
+    assert at.session_state["tour_done"]
+    _button(at, "Take the quick tour").click().run()
+    for _ in range(3):
+        _button(at, "Next").click().run()
+    _button(at, "Start exploring").click().run()
+    assert at.session_state["tour_done"]
+    assert not at.exception
+
+
+def test_search_submit_and_save_remove(app_config, tmp_path):
+    at = AppTest.from_file(_script(tmp_path, "home"), default_timeout=120).run()
+    at.text_input(key="q").input("language models")
+    _button(at, "Find papers").click().run()
+    assert not at.exception
+    _button(at, "Save to reading list").click().run()
+    assert len(at.session_state["saved_papers"]) == 1
+    _button(at, "Remove from reading list").click().run()
+    assert len(at.session_state["saved_papers"]) == 0
+    assert not at.exception
+
+
+def test_empty_area_filter(app_config, tmp_path):
+    at = AppTest.from_file(_script(tmp_path, "areas"), default_timeout=120).run()
+    at.text_input[0].input("nonexistent-area-xyz").run()
+    assert any("No areas match" in info.value for info in at.info)
+    assert not at.exception

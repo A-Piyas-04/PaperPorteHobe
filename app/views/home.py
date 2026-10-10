@@ -61,9 +61,9 @@ def _landing(bundle) -> None:
                            on_click=_set_query, args=(ex,))
 
     st.markdown("<div class='sg-journey'>"
-                "<div><b>01 ? Find your starting point</b><p>Search an interest or browse a research area.</p></div>"
-                "<div><b>02 ? Understand the context</b><p>Read abstracts and follow related papers.</p></div>"
-                "<div><b>03 ? Leave with a reading list</b><p>Save useful papers and export your references.</p></div>"
+                "<div><b>01 - Find your starting point</b><p>Search an interest or browse a research area.</p></div>"
+                "<div><b>02 - Understand the context</b><p>Read abstracts and follow related papers.</p></div>"
+                "<div><b>03 - Leave with a reading list</b><p>Save useful papers and export your references.</p></div>"
                 "</div>", unsafe_allow_html=True)
     tour.render()
     with ui.panel("start-browsing"):
@@ -72,7 +72,7 @@ def _landing(bundle) -> None:
         if st.button("Browse research areas", use_container_width=True):
             ui.goto("explore")
     snap = bundle.meta.get("snapshot", {})
-    st.caption(f"Searching {len(bundle.df):,} papers across {len(bundle.clusters_meta)} areas ? "
+    st.caption(f"Searching {len(bundle.df):,} papers across {len(bundle.clusters_meta)} areas - "
                f"Latest included paper: {ui.fmt_date(snap.get('latest_included_date'))}. "
                "Results reflect this dataset, not all published research.")
 

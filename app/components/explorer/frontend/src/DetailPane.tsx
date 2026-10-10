@@ -12,36 +12,25 @@ interface Props {
   onHover: (i: number | null) => void;
   onArea: (id: number | null) => void;
   onOpenArea: (id: number) => void;
+  savedIds: string[];
+  onSave: (id: string) => void;
 }
 
 const MAX_AUTHORS = 6;
 
-function Overview({ data, areaFilter, onArea }: Props) {
-  const totalCites = data.papers.reduce((n, p) => n + p.ci, 0);
+function Overview({ areaFilter, areaById }: Props) {
+  const area = areaFilter === null ? null : areaById.get(areaFilter);
   return (
-    <div className="detail fade-in">
-      <div className="eyebrow">Overview</div>
+    <div className="detail">
+      <div className="eyebrow">Read with context</div>
       <h2 className="detail-title">Your next read starts here</h2>
-      <p>Choose a title from the paper list. Read its abstract, open the original on arXiv, then follow related papers to understand the area.</p>
-      <div className="stats">
-        <div><b>{fmtInt(data.papers.length)}</b><span>papers</span></div>
-        <div><b>{data.areas.length}</b><span>areas</span></div>
-        <div><b>{fmtInt(totalCites)}</b><span>citations</span></div>
-      </div>
-      <div className="section-title">Areas</div>
-      <div className="area-list">
-        {data.areas.map((a) => (
-          <button
-            key={a.id}
-            className={`area-row${areaFilter === a.id ? " active" : ""}`}
-            onClick={() => onArea(areaFilter === a.id ? null : a.id)}
-          >
-            <span className="dot" style={{ background: a.color }} />
-            <span className="area-name">{a.name}</span>
-            <span className="area-count">{a.size}</span>
-          </button>
-        ))}
-      </div>
+      <p>{area ? `You are browsing ${area.name}.` : "You are browsing papers from the current dataset."}</p>
+      <ol className="reading-guide">
+        <li><b>Choose a title</b><p>Open a paper from the list to read its abstract here.</p></li>
+        <li><b>Follow related work</b><p>Discover papers with similar ideas, one connection at a time.</p></li>
+        <li><b>Keep what is useful</b><p>Save papers to your reading list and export your references before leaving.</p></li>
+      </ol>
+      <p className="muted">Your selection stays here until you choose another paper.</p>
     </div>
   );
 }
@@ -92,7 +81,8 @@ export default function DetailPane(props: Props) {
           <div><b>{props.degree[selected]}</b><span>similar</span></div>
         </div>
 
-        <div className={`abstract${expanded || !longAbstract ? " open" : ""}`}>{p.ab}</div>
+        <div className="section-title">Abstract excerpt</div>
+        <div className={`abstract${expanded || !longAbstract ? " open" : ""}`}>{p.ab || "No abstract available. Open the original paper on arXiv."}</div>
         {longAbstract && (
           <button className="link-btn" onClick={() => setExpanded(!expanded)}>
             {expanded ? "Show less" : "Show more"}
@@ -103,6 +93,10 @@ export default function DetailPane(props: Props) {
           <a className="btn primary" href={arxivUrl(p.id)} target="_blank" rel="noopener noreferrer">Open on arXiv</a>
           <a className="btn" href={pdfUrl(p.id)} target="_blank" rel="noopener noreferrer">PDF</a>
         </div>
+        <button className="save-paper" aria-pressed={props.savedIds.includes(p.id)} onClick={() => props.onSave(p.id)}>
+          {props.savedIds.includes(p.id) ? "Remove from reading list" : "Save to reading list"}
+        </button>
+        <p className="muted">Saved for this session. Export from Reading list before leaving.</p>
 
         {nbrs.length > 0 && (
           <>

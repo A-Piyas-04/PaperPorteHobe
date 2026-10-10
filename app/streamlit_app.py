@@ -78,6 +78,9 @@ def main() -> None:
 
     pages = _build_pages()
     st.session_state["_pages"] = pages
+    # Keep the last query when Streamlit cleans up widgets on other pages.
+    if "q" in st.session_state:
+        st.session_state["q"] = st.session_state["q"]
 
     nav = st.navigation(list(pages.values()), position="hidden")
     ui.render_top_nav(pages)

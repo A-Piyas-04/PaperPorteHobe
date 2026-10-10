@@ -30,7 +30,7 @@ export default function App({ args }: { args: Args | null }) {
     for (const [a, b] of data?.edges ?? []) { counts[a]++; counts[b]++; }
     return counts;
   }, [data]);
-  useEffect(() => { Streamlit.setFrameHeight(960); }, []);
+  useEffect(() => { Streamlit.setFrameHeight(960); }, [args]);
   useEffect(() => {
     setPending(null); setTimedOut(false); setSelected(null);
     if (hl) { setView("papers"); setArea(null); setCategory(null); }
@@ -97,6 +97,7 @@ export default function App({ args }: { args: Args | null }) {
         <section className="reading-detail" aria-label="Paper details">
           {selected !== null && <button className="back-to-list" onClick={() => setMobileDetail(false)}>← Back to papers</button>}
           <DetailPane data={data} selected={selected} areaById={areaById} areaFilter={areaFilter} degree={degree}
+            savedIds={args?.saved_ids ?? []} onSave={id => send({ type: "save", id })}
             onSelect={select} onHover={() => {}} onArea={focus} onOpenArea={id => send({ type: "open_area", id })} />
         </section>
       </div>

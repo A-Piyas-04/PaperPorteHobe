@@ -35,6 +35,8 @@ reports/*
 
 # Explorer component: commit the built dist/, never node_modules.
 app/components/explorer/frontend/node_modules/
+app/components/explorer/frontend/test-results/
+app/components/explorer/frontend/playwright-report/
 *.log
 
 # OS / editor

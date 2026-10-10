@@ -13,8 +13,9 @@ It is an **exploration and decision-support tool** — *not* an automatic
 research-gap or thesis-topic generator. See [`Docs/ScholarGrid_SRS.md`](Docs/ScholarGrid_SRS.md)
 for the full requirements this implements.
 
-This repository contains **version 1** — all SRS *Must* requirements plus the
-*Should* items (sparse detection, category/date filtering, evidence UI).
+This repository contains the **version 2 pipeline** and a guided research UI.
+The original SRS records the analytical scope; the [UX review](Docs/ux-review.md)
+documents the current interface and remaining readiness limits.
 
 ---
 
@@ -83,8 +84,8 @@ python pipeline/run_pipeline.py          # or skip and click "Load demo data" in
 streamlit run app/streamlit_app.py       # app.py also works (Hugging Face Spaces entry)
 ```
 
-New here? See [`next-instructions.md`](next-instructions.md) for step-by-step
-setup and deployment, and [`implementation-details.md`](implementation-details.md)
+New here? See [`Docs/next-instructions.md`](Docs/next-instructions.md) for step-by-step
+setup and deployment, and [`Docs/README.md`](Docs/README.md)
 for the technical reference.
 
 ### Choosing a data source
@@ -142,22 +143,17 @@ docker build -t scholargrid .   # production image (non-root, health-checked)
 
 ## The application (SRS §16.1)
 
-A clean, low-text GUI (no neon/glassmorphism) built around a single interactive
-map and one adaptive side panel.
+The application follows **Find papers - understand the area - build a reading list**.
 
-- **Research landscape** — interactive 2D WebGL map; **click or lasso points to
-  inspect papers**, focus an area to dim the rest.
-- **Semantic search bar** — one box + example chips; query embedded with the
-  same model; matches starred on the map, cluster distribution shown, ambiguity
-  flagged.
-- **Adaptive panel** — search results → selected papers → cluster details
-  (label, keywords, representative papers, monthly counts, relative growth) →
-  *Research areas* overview.
-- **Growth / Investigation leads / How it works / Limitations / Dataset** —
-  collapsed expanders (FR-13/FR-14), kept out of the way until needed.
-- **Evidence everywhere** — every item links back to real arXiv papers (NFR-06).
-- **First run** — one-click *Load demo data* (offline) or the real-harvest
-  command.
+- **Find papers:** describe an interest, use example searches, and inspect ranked results.
+- **Quick tour:** four short steps, with Back, Skip, and replay on the home page.
+- **Workspace:** browse readable area cards, then select papers in a two-column reading view. On phones, switch between the list and details. Selection changes only on click.
+- **Related papers:** follow connections for one selected paper, without a full-corpus network.
+- **Reading list:** save search results for the current session and export CSV or BibTeX.
+- **More:** area summaries, trends, investigation leads, methodology, and dataset provenance.
+- **Trust:** original arXiv links, coverage disclosures, demo/degraded-search notices, and existing reliability gates.
+
+See the [documentation guide](Docs/README.md) and [UX review](Docs/ux-review.md) for current behavior, historical-document corrections, and remaining limits. Session data is not durable storage. This local UI redesign does not establish production launch readiness.
 
 ---
 

@@ -44,9 +44,11 @@ export interface Args {
   focus_area: number | null;
   select: number | null;
   height: number;
+  saved_ids?: string[];
 }
 
 export type UIEvent =
   | { type: "search"; q: string; nonce: number }
   | { type: "clear"; nonce: number }
-  | { type: "open_area"; id: number; nonce: number };
+  | { type: "open_area"; id: number; nonce: number }
+  | { type: "save"; id: string; nonce: number };

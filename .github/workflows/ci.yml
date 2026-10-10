@@ -74,6 +74,8 @@ jobs:
           cache-dependency-path: app/components/explorer/frontend/package-lock.json
       - run: npm ci
       - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
 
   audit:
     runs-on: ubuntu-latest

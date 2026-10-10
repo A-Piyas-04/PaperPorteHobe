@@ -11,7 +11,7 @@ _STEPS = [
      "Filter by research area, or browse area cards if you are still choosing a topic."),
     ("Read the evidence", "Choose a paper to read its abstract and follow related papers. "
      "Your selection stays put until you click another title. Open arXiv for the original paper."),
-    ("Build your next reading list", "Save useful papers from search results to your Reading list and export them. "
+    ("Build your next reading list", "Save useful papers from search results or the workspace to your Reading list and export them. "
      "Use Trends and Investigation leads when you want more context. Signals depend on the dataset; "
      "a quiet area is not proof of a research gap."),
 ]
