@@ -96,6 +96,9 @@ class NeighborIndex:
     # -- persistence -----------------------------------------------------------
     def save(self, directory: str) -> None:
         if self.backend != "faiss_hnsw":
+            stale = os.path.join(directory, INDEX_FILE)
+            if os.path.exists(stale):
+                os.remove(stale)
             return
         import faiss  # type: ignore
 
@@ -110,6 +113,10 @@ class NeighborIndex:
                 import faiss  # type: ignore
 
                 ann = faiss.read_index(path)
+                if ann.ntotal != len(vectors):
+                    log.warning("ANN index has %d vectors but the corpus has %d; using exact search.",
+                                ann.ntotal, len(vectors))
+                    return cls("exact", vectors, cfg)
                 ann.hnsw.efSearch = int(cfg["index"]["ef_search"])  # type: ignore[attr-defined]
                 return cls("faiss_hnsw", vectors, cfg, ann)
             except Exception as exc:  # pragma: no cover - faiss missing at runtime

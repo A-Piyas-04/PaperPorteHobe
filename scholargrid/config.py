@@ -34,6 +34,7 @@ _ENV_OVERRIDES = {
     "OPENALEX_MAILTO": ("enrich", "mailto"),
     "SCHOLARGRID_ENV": ("environment",),
     "SCHOLARGRID_RELEASE": ("release", "pin"),
+    "SCHOLARGRID_ALLOW_GROW": ("app", "allow_grow"),
 }
 
 
@@ -94,6 +95,10 @@ class Config:
     @property
     def releases_dir(self) -> str:
         return self._path("releases_dir")
+
+    @property
+    def live_dir(self) -> str:
+        return self._path("live_dir")
 
     # -- derived settings ---------------------------------------------------
     @property

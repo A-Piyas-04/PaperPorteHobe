@@ -21,6 +21,7 @@ class Paths(_Section):
     reports_dir: str = "reports"
     stages_dir: str = "data/stages"
     releases_dir: str = "data/releases"
+    live_dir: str = "data/live"
 
 
 class OaiPmh(_Section):
@@ -45,6 +46,8 @@ class Data(_Section):
     min_abstract_chars: int = Field(default=200, ge=0)
     language_filter: bool = True
     arxiv_queries: List[str] = Field(default_factory=list)
+    arxiv_slice: Literal["month", "none"] = "month"
+    arxiv_page_size: int = Field(default=1000, ge=1, le=2000)
     kaggle_json: str = "data/raw/arxiv-metadata-oai-snapshot.json"
     oai_pmh: OaiPmh = Field(default_factory=OaiPmh)
 
@@ -105,6 +108,8 @@ class Embedding(_Section):
     tfidf_dims: int = 256
     tfidf_max_features: int = 20000
     batch_size: int = 64
+    query_prefix: str = ""
+    max_seq_length: Optional[int] = Field(default=None, ge=16)
 
 
 class Index(_Section):
@@ -170,6 +175,23 @@ class Search(_Section):
     rerank: bool = False
     rerank_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     max_query_chars: int = 300
+    top_k_exact: int = Field(default=100, ge=1)
+    top_k_related: int = Field(default=50, ge=0)
+    related_min_sim: Optional[float] = None
+    related_min_z: float = 2.0
+    related_rel_cutoff: float = Field(default=0.5, ge=0, le=1)
+    proximity_window: int = Field(default=8, ge=2)
+    synonyms: Dict[str, List[str]] = Field(default_factory=dict)
+    live: bool = True
+    live_sources: List[Literal["arxiv", "openalex", "semantic_scholar"]] = Field(
+        default_factory=lambda: ["arxiv", "openalex", "semantic_scholar"])
+    live_per_source: int = Field(default=200, ge=1)
+    live_deadline_s: float = Field(default=10.0, gt=0)
+    s2_budget_s: float = Field(default=6.0, gt=0)
+    live_cache_hours: float = Field(default=24.0, ge=0)
+    live_embed_max: int = Field(default=300, ge=0)
+    live_embed_budget_s: float = Field(default=4.0, ge=0)
+    cooldown_s: float = Field(default=60.0, ge=0)
 
 
 class Sparse(_Section):
@@ -209,6 +231,7 @@ class App(_Section):
     max_graph_nodes: int = Field(default=20000, ge=100)
     max_area_papers: int = Field(default=400, ge=10)
     pre_warm: bool = True
+    allow_grow: bool = True
 
 
 class ConfigModel(_Section):

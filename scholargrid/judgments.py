@@ -31,7 +31,8 @@ def export(out: str, top: int, config: str | None) -> None:
     for q in spec["queries"]:
         grades = _grades(b.df, q, text)
         res = search(q["query"], b.embedder, b.embeddings, b.df, b.labels, b.clusters_meta,
-                     top_k=top, bm25=b.bm25, index=b.index, cfg=cfg)
+                     top_k=top, bm25=b.bm25, index=b.index, cfg=cfg,
+                     phrase_index=b.phrase, acronyms=b.acronyms)
         for r, i in zip(res["results"], res["result_indices"]):
             rows.append({"query": q["query"], "rank": r["rank"], "arxiv_id": r["arxiv_id"],
                          "title": r["title"], "abstract": str(b.df.iloc[i]["abstract"])[:400],

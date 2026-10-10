@@ -3,6 +3,11 @@
 Complements dense retrieval for exact-term queries (model names, acronyms,
 dataset names). Stored in the bundle as a sparse term-frequency matrix plus
 vocabulary, so the app needs no extra dependency.
+
+The vocabulary also holds frequent two-word phrases ("technical debt"), and a
+query's adjacent word pairs add a bonus, so papers using the words as a phrase
+outrank papers that merely mention both words. Indexes built before bigrams
+were added simply get no bonus.
 """
 from __future__ import annotations
 
@@ -31,7 +36,11 @@ class BM25Index:
         self.vocab = vocab
         self.k1, self.b = k1, b
         n_docs = tf.shape[0]
-        self.doc_len = np.asarray(tf.sum(axis=1)).ravel().astype(np.float32)
+        unigram = np.ones(self.tf.shape[1], dtype=bool)
+        for term, j in vocab.items():
+            if " " in term:
+                unigram[j] = False
+        self.doc_len = np.asarray(self.tf[:, unigram].sum(axis=1)).ravel().astype(np.float32)
         self.avgdl = float(self.doc_len.mean()) if n_docs else 1.0
         df = np.diff(self.tf.indptr)
         self.idf = np.log(1.0 + (n_docs - df + 0.5) / (df + 0.5)).astype(np.float32)
@@ -41,7 +50,7 @@ class BM25Index:
         from sklearn.feature_extraction.text import CountVectorizer
 
         vec = CountVectorizer(tokenizer=tokenize, lowercase=False, token_pattern=None,
-                              max_features=max_features, dtype=np.float32)
+                              ngram_range=(1, 2), max_features=max_features, dtype=np.float32)
         tf = vec.fit_transform(texts)
         vocab = {str(k): int(v) for k, v in vec.vocabulary_.items()}
         return cls(tf.tocsc(), vocab)
@@ -49,15 +58,22 @@ class BM25Index:
     def query_terms(self, query: str) -> List[str]:
         return [t for t in dict.fromkeys(tokenize(query)) if t in self.vocab]
 
-    def scores(self, query: str) -> np.ndarray:
+    def query_bigrams(self, query: str) -> List[str]:
+        toks = tokenize(query)
+        pairs = dict.fromkeys(f"{a} {b}" for a, b in zip(toks, toks[1:]))
+        return [p for p in pairs if p in self.vocab]
+
+    def scores(self, query: str, bigram_weight: float = 1.0) -> np.ndarray:
         out = np.zeros(self.tf.shape[0], dtype=np.float32)
         norm = self.k1 * (1 - self.b + self.b * self.doc_len / max(self.avgdl, 1e-9))
-        for term in self.query_terms(query):
+        weighted = [(t, 1.0) for t in self.query_terms(query)]
+        weighted += [(t, bigram_weight) for t in self.query_bigrams(query)]
+        for term, weight in weighted:
             j = self.vocab[term]
             start, end = self.tf.indptr[j], self.tf.indptr[j + 1]
             rows = self.tf.indices[start:end]
             f = self.tf.data[start:end]
-            out[rows] += self.idf[j] * f * (self.k1 + 1) / (f + norm[rows])
+            out[rows] += weight * self.idf[j] * f * (self.k1 + 1) / (f + norm[rows])
         return out
 
     def topk(self, query: str, k: int) -> tuple[np.ndarray, np.ndarray]:

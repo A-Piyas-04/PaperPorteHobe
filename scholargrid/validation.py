@@ -46,7 +46,8 @@ _GATES = {
 
 def validate(cfg: Config, df: pd.DataFrame, embeddings: np.ndarray, reduced: np.ndarray,
              labels: np.ndarray, clusters_meta: Dict, embedder, sparse_leads: list, *,
-             bm25=None, index=None, quality: Optional[Dict] = None,
+             bm25=None, index=None, phrase=None, acronyms: Optional[Dict] = None,
+             quality: Optional[Dict] = None,
              growth: Optional[Dict] = None, stability: Optional[Dict] = None,
              ann_recall: Optional[float] = None, enrichment: Optional[Dict] = None,
              cluster_match: Optional[Dict] = None, write: bool = True) -> Dict:
@@ -60,7 +61,8 @@ def validate(cfg: Config, df: pd.DataFrame, embeddings: np.ndarray, reduced: np.
         "data": {"papers": int(len(df)), "span_months": span_months(df),
                  "quality": quality or {}},
         "clusters": clusters,
-        "search": _validate_search(cfg, df, embeddings, labels, clusters_meta, embedder, bm25, index),
+        "search": _validate_search(cfg, df, embeddings, labels, clusters_meta, embedder, bm25, index,
+                                   phrase, acronyms),
         "growth": _validate_growth(cfg, df, labels, growth),
         "projection_robustness": _validate_projection(sparse_leads, cfg),
         "index": {"backend": getattr(index, "backend", "exact"), "recall_at_25": ann_recall},
@@ -249,7 +251,11 @@ def _judged_grades(df: pd.DataFrame, judged: Dict[str, int]) -> np.ndarray:
     return m.fillna(0).astype(int).to_numpy()
 
 
-def _validate_search(cfg, df, embeddings, labels, clusters_meta, embedder, bm25, index) -> Dict:
+def _validate_search(cfg, df, embeddings, labels, clusters_meta, embedder, bm25, index,
+                     phrase=None, acronyms=None) -> Dict:
+    from .phrase import PhraseIndex
+
+    phrase = phrase if phrase is not None else PhraseIndex.from_frame(df)
     v = cfg["validation"]
     spec = load_json(cfg.abspath(v["queries_file"]))
     judgments: Dict[str, Dict[str, int]] = {}
@@ -267,7 +273,8 @@ def _validate_search(cfg, df, embeddings, labels, clusters_meta, embedder, bm25,
         grades = _judged_grades(df, judged) if judged else _grades(df, q, text)
         for name, mode in modes.items():
             res = search(q["query"], embedder, embeddings, df, labels, clusters_meta,
-                         top_k=max(k, recall_k), bm25=bm25, index=index, cfg=cfg, mode=mode)
+                         top_k=max(k, recall_k), bm25=bm25, index=index, cfg=cfg, mode=mode,
+                         phrase_index=phrase, acronyms=acronyms)
             m = search_metrics(res["result_indices"], grades, k, recall_k)
             m.update({"query": q["query"], "area": q.get("area", ""), "judged": bool(judged),
                       "mode": res["mode"]})

@@ -11,11 +11,13 @@ bundle), so any stage can be re-run alone from cached inputs:
     python -m scholargrid.pipeline --stage embed         # one stage
     python -m scholargrid.pipeline --from-stage analyze  # analyze, validate, publish
     python -m scholargrid.pipeline --config configs/production.yaml
+    python -m scholargrid.pipeline --background          # detached; the app keeps working
 """
 from __future__ import annotations
 
 import argparse
 import os
+import sys
 import time
 from datetime import UTC, datetime
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -145,6 +147,7 @@ def _previous_assignments(cfg: Config) -> Optional[pd.DataFrame]:
 
 
 def stage_analyze(ctx: Context) -> None:
+    from .acronyms import mine as mine_acronyms
     from .artifacts import save_bundle
     from .bm25 import BM25Index
     from .cluster_match import match_clusters
@@ -154,6 +157,7 @@ def stage_analyze(ctx: Context) -> None:
     from .growth import compute_growth
     from .index import NeighborIndex
     from .labeling import generate_labels
+    from .phrase import PhraseIndex
     from .reduce import project_2d, reduce_analytical
     from .sparse import detect_sparse
     from .utils import l2_normalize
@@ -214,6 +218,10 @@ def stage_analyze(ctx: Context) -> None:
     with stage_timer("bm25", t) as info:
         bm25 = BM25Index.build(paper_text(df))
         info.update(vocab=len(bm25.vocab))
+    with stage_timer("phrases", t) as info:
+        phrase = PhraseIndex.from_frame(df)
+        acronyms = mine_acronyms(df["abstract"].astype(str))
+        info.update(acronyms=len(acronyms))
 
     caps = capabilities()
     meta = {
@@ -250,11 +258,11 @@ def stage_analyze(ctx: Context) -> None:
     with stage_timer("save", t):
         save_bundle(cfg, df, embeddings, reduced, coords2d, labels, clusters_meta, growth,
                     sparse_leads, embedder, meta, edges=edges, neighbors=neighbors,
-                    bm25=bm25, index=index)
+                    bm25=bm25, index=index, phrase=phrase, acronyms=acronyms)
     ctx.data.update(df=df, embeddings=embeddings, reduced=reduced, labels=labels,
                     clusters_meta=clusters_meta, growth=growth, sparse_leads=sparse_leads,
                     embedder=embedder, index=index, bm25=bm25, meta=meta, stability=stability,
-                    ann_recall=recall)
+                    ann_recall=recall, phrase=phrase, acronyms=acronyms)
 
 
 def _snapshot(df: pd.DataFrame, cfg: Config) -> Dict:
@@ -277,10 +285,11 @@ def stage_validate(ctx: Context) -> None:
                  index=b.index, bm25=b.bm25, meta=b.meta,
                  reduced=np.load(os.path.join(cfg.processed_dir, "reduced.npy")),
                  stability=b.meta.get("cluster_stability", {}),
-                 ann_recall=b.meta.get("ann_recall_at_25"))
+                 ann_recall=b.meta.get("ann_recall_at_25"), phrase=b.phrase, acronyms=b.acronyms)
     with stage_timer("validate", ctx.timings) as info:
         report = validate(cfg, d["df"], d["embeddings"], d["reduced"], d["labels"], d["clusters_meta"],
                           d["embedder"], d["sparse_leads"], bm25=d["bm25"], index=d["index"],
+                          phrase=d.get("phrase"), acronyms=d.get("acronyms"),
                           quality=d["meta"].get("quality"), growth=d["growth"],
                           stability=d["stability"], ann_recall=d["ann_recall"],
                           enrichment=d["meta"].get("enrichment"),
@@ -344,9 +353,21 @@ def main(argv: Optional[List[str]] = None) -> None:
     p.add_argument("--no-publish", action="store_true", help="skip the publish stage")
     p.add_argument("--force-publish", action="store_true",
                    help="publish even if required validation gates fail (recorded in the manifest)")
+    p.add_argument("--background", action="store_true",
+                   help="run detached; progress goes to data/grow_status.json and data/grow.log")
+    p.add_argument("--status-file", default=None, help=argparse.SUPPRESS)
     args = p.parse_args(argv)
 
     cfg = load_config(args.config)
+    if args.background:
+        from .grow import log_path, start
+
+        passthrough = [a for a in (argv if argv is not None else sys.argv[1:]) if a != "--background"]
+        passthrough = [a for i, a in enumerate(passthrough)
+                       if a != "--config" and (i == 0 or passthrough[i - 1] != "--config")]
+        status = start(cfg, passthrough)
+        print(f"Background pipeline running (pid {status.get('pid')}); log: {log_path(cfg)}")
+        return
     init_error_tracking("pipeline", cfg["pipeline_version"])
     if args.stage:
         stages = [args.stage]
@@ -356,11 +377,39 @@ def main(argv: Optional[List[str]] = None) -> None:
         stages = list(STAGES)
     if args.no_publish and "publish" in stages:
         stages.remove("publish")
+    progress = None
+    if args.status_file:
+        from . import data_ingest
+        from .grow import write_status
+
+        status_file = args.status_file
+        write_status(status_file, state="running", pid=os.getpid(), stages=stages)
+        span = _PROGRESS["enrich"][0] - _PROGRESS["ingest"][0]
+
+        def progress(frac: float, msg: str) -> None:
+            write_status(status_file, progress=round(frac, 3), message=msg)
+
+        def harvest_progress(done: int, total: int, n: int) -> None:
+            write_status(status_file, progress=round(_PROGRESS["ingest"][0] + span * done / total, 3),
+                         message=f"Collecting papers from arXiv: month {done} of {total} "
+                                 f"({n:,} records so far)")
+
+        data_ingest.set_harvest_progress(harvest_progress)
     try:
-        meta, report = run(cfg, stages=stages, force_publish=args.force_publish)
+        meta, report = run(cfg, progress=progress, stages=stages, force_publish=args.force_publish)
     except Exception as exc:
         capture_exception(exc)
+        if args.status_file:
+            write_status(args.status_file, state="failed", message=f"{type(exc).__name__}: {exc}"[:500],
+                         finished_at=datetime.now(UTC).isoformat(timespec="seconds"))
         raise
+    if args.status_file:
+        from .release import current_release
+
+        write_status(args.status_file, state="done", progress=1.0, message="Finished.",
+                     release=current_release(cfg),
+                     papers=((meta or {}).get("counts") or {}).get("papers"),
+                     finished_at=datetime.now(UTC).isoformat(timespec="seconds"))
     if report:
         g = report["gates"]
         log.info("search nDCG@10=%s precision@10=%s | clusters=%s | gates %s",

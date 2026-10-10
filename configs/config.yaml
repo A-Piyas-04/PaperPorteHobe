@@ -20,18 +20,21 @@ paths:
   reports_dir: reports
   stages_dir: data/stages        # cached per-stage outputs
   releases_dir: data/releases    # published, versioned bundles
+  live_dir: data/live            # papers found by live search, with their embeddings
 
 # ---------------------------------------------------------------------------
 # FR-01  Research dataset ingestion
 # ---------------------------------------------------------------------------
 data:
-  # source: "arxiv_api" (latest papers only, ad hoc demos), "kaggle" (bulk
-  # snapshot backfill), "oai_pmh" (date-ranged official bulk harvest) or
+  # source: "arxiv_api" (search API, harvested in monthly slices), "kaggle"
+  # (bulk snapshot backfill), "oai_pmh" (date-ranged official bulk harvest) or
   # "synthetic" (offline, deterministic demo corpus).
+  # The main collection only feeds Areas/Trends/Leads; search also queries
+  # arXiv, OpenAlex and Semantic Scholar live (see search.live).
   source: arxiv_api
   # profile sets the corpus size: dev (~5k), standard (~50k), full (no cap),
   # or custom (uses max_papers below).
-  profile: custom
+  profile: standard
   max_papers: 1500
   date_start: "2023-01-01"
   date_end: "2026-10-05"         # or "auto" for today
@@ -52,6 +55,9 @@ data:
     - "cat:cs.AI"
     - "cat:cs.DC"
     - "cat:cs.SE"
+    - "cat:cs.PL"
+  arxiv_slice: month             # split each query into monthly date slices (spreads papers over the window)
+  arxiv_page_size: 1000          # results per API request (arXiv allows up to 2000)
   kaggle_json: data/raw/arxiv-metadata-oai-snapshot.json
   oai_pmh:
     endpoint: "https://oaipmh.arxiv.org/oai"
@@ -108,8 +114,11 @@ embedding:
   # backend: "auto" prefers sentence-transformers when importable, otherwise
   # the reproducible "tfidf" backend. Force with "minilm"/"tfidf".
   backend: auto
-  model_name: "all-MiniLM-L6-v2"
+  model_name: "BAAI/bge-small-en-v1.5"
   model_revision: null           # pin a Hugging Face commit hash in production
+  # bge models expect this instruction in front of queries (not documents).
+  query_prefix: "Represent this sentence for searching relevant passages: "
+  max_seq_length: 256            # title + abstract rarely need more; keeps CPU embedding fast
   device: auto                   # auto | cpu | cuda
   dtype: float32                 # float16 halves the on-disk size
   incremental: true              # reuse cached vectors for unchanged papers
@@ -189,6 +198,30 @@ search:
   rerank: false                  # cross-encoder re-ranking of the top candidates
   rerank_model: "cross-encoder/ms-marco-MiniLM-L-6-v2"
   max_query_chars: 300
+  # Results come in two sections: papers containing the phrase (or an acronym
+  # expansion of it), then papers with similar meaning.
+  top_k_exact: 100
+  top_k_related: 50
+  # Related papers need: similarity >= related_min_sim, or (when null) both
+  # mean + related_min_z * std of the query's similarities over the corpus and
+  # a point related_rel_cutoff of the way from the corpus mean similarity up
+  # to the best match's similarity.
+  related_min_sim: null
+  related_min_z: 2.0
+  related_rel_cutoff: 0.5
+  proximity_window: 8            # "all words nearby" match: every query word within this many words
+  synonyms:                      # extra two-way expansions; acronyms are also mined from abstracts
+    technical debt: ["tech debt"]
+  # Live lookup on every search. Papers found are stored under paths.live_dir.
+  live: true
+  live_sources: [arxiv, openalex, semantic_scholar]
+  live_per_source: 200           # papers requested per source per page ("Load more" fetches the next page)
+  live_deadline_s: 10            # stop waiting for sources after this long
+  s2_budget_s: 6                 # drop Semantic Scholar if it has not answered by then
+  live_cache_hours: 24
+  live_embed_max: 300            # new papers embedded per search; the rest are embedded on later searches
+  live_embed_budget_s: 4         # ...and at most this long spent embedding per search
+  cooldown_s: 60                 # skip a source for this long after it returns 429
 
 # ---------------------------------------------------------------------------
 # FR-08  Sparse-neighborhood exploration
@@ -240,3 +273,4 @@ app:
   max_graph_nodes: 20000         # Explore sends at most this many papers to the workspace (sampled per area)
   max_area_papers: 400           # Map focuses on at most this many papers per area (most-cited first)
   pre_warm: true                 # load the bundle and embedding model at startup
+  allow_grow: true               # show the "Grow collection" button on About (turn off for public sites)

@@ -3,9 +3,11 @@
 A single :class:`Embedder` encodes both stored papers and user queries with the
 *same* method (a hard FR-02 requirement). Two backends:
 
-* ``minilm`` - a sentence-transformers model (default ``all-MiniLM-L6-v2``),
+* ``minilm`` - any sentence-transformers model (default ``BAAI/bge-small-en-v1.5``),
   optionally pinned to a Hugging Face revision so query embeddings in the app
-  always match the corpus.
+  always match the corpus. Retrieval models such as bge take a
+  ``query_prefix`` that is added to queries only; it is saved with the model so
+  a bundle always embeds queries the way it was built.
 * ``tfidf``  - TfidfVectorizer -> TruncatedSVD -> L2 normalise. A fully
   reproducible, offline fallback that needs only scikit-learn.
 
@@ -57,6 +59,8 @@ class Embedder:
         ecfg = cfg["embedding"]
         self.model_name: str = ecfg["model_name"]
         self.revision: Optional[str] = ecfg.get("model_revision")
+        self.query_prefix: str = ecfg.get("query_prefix") or ""
+        self.max_seq_length: Optional[int] = ecfg.get("max_seq_length")
         self._model: Any = None          # minilm
         self._vectorizer: Any = None     # tfidf
         self._svd: Any = None            # tfidf
@@ -90,7 +94,8 @@ class Embedder:
         raise ValueError(self.backend)
 
     def encode_query(self, query: str) -> np.ndarray:
-        return self.transform([query])[0]
+        prefix = self.query_prefix if self.backend == "minilm" else ""
+        return self.transform([prefix + query])[0]
 
     # -- backends -----------------------------------------------------------
     def _ensure_model(self) -> None:
@@ -102,6 +107,8 @@ class Embedder:
         log.info("Loading sentence-transformers model '%s' (revision=%s, device=%s).",
                  self.model_name, self.revision or "latest", device)
         self._model = SentenceTransformer(self.model_name, revision=self.revision, device=device)
+        if self.max_seq_length:
+            self._model.max_seq_length = int(self.max_seq_length)
 
     def _fit_minilm(self, texts: List[str], ids: Optional[List[str]]) -> np.ndarray:
         self._ensure_model()
@@ -136,7 +143,9 @@ class Embedder:
     def save(self, directory: str) -> None:
         ensure_dir(directory)
         save_json({"backend": self.backend, "dim": self.dim, "model_name": self.model_name,
-                   "model_revision": self.revision}, os.path.join(directory, "embedder_meta.json"))
+                   "model_revision": self.revision, "query_prefix": self.query_prefix,
+                   "max_seq_length": self.max_seq_length},
+                  os.path.join(directory, "embedder_meta.json"))
         if self.backend == "tfidf":
             import joblib
 
@@ -157,6 +166,9 @@ class Embedder:
         emb.dim = meta.get("dim")
         emb.model_name = meta.get("model_name") or emb.model_name
         emb.revision = meta.get("model_revision", emb.revision)
+        # Older bundles were embedded without a query prefix; never add one to them.
+        emb.query_prefix = meta.get("query_prefix") or ""
+        emb.max_seq_length = meta.get("max_seq_length")
         if emb.backend == "tfidf":
             path = os.path.join(directory, "tfidf.joblib")
             if os.path.exists(path):

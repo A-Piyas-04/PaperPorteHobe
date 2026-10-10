@@ -15,10 +15,12 @@ from typing import Dict, List, Optional
 import numpy as np
 import pandas as pd
 
+from . import acronyms as acronym_io
 from .bm25 import BM25Index
 from .config import Config
 from .embeddings import Embedder, paper_text
 from .index import NeighborIndex
+from .phrase import PhraseIndex
 from .utils import ensure_dir, get_logger, load_json, save_json
 
 log = get_logger("artifacts")
@@ -59,6 +61,7 @@ def save_bundle(cfg: Config, df: pd.DataFrame, embeddings: np.ndarray,
                 embedder: Embedder, meta: Dict,
                 edges: Optional[List] = None, neighbors: Optional[Dict] = None,
                 bm25: Optional[BM25Index] = None, index: Optional[NeighborIndex] = None,
+                phrase: Optional[PhraseIndex] = None, acronyms: Optional[Dict] = None,
                 out: Optional[str] = None) -> str:
     out = ensure_dir(out or cfg.processed_dir)
     table = df.copy()
@@ -86,6 +89,10 @@ def save_bundle(cfg: Config, df: pd.DataFrame, embeddings: np.ndarray,
         bm25.save(out)
     if index is not None:
         index.save(out)
+    if phrase is not None:
+        phrase.save(out)
+    if acronyms is not None:
+        acronym_io.save(acronyms, out)
     log.info("Saved artifact bundle to %s", out)
     return out
 
@@ -106,6 +113,8 @@ class Bundle:
     index: Optional[NeighborIndex] = None
     path: str = ""
     embedder_error: Optional[str] = None
+    phrase: Optional[PhraseIndex] = None
+    acronyms: Dict = field(default_factory=dict)
 
 
 def _load_optional(path: str, default):
@@ -161,8 +170,10 @@ def load_bundle(cfg: Config, directory: Optional[str] = None) -> Bundle:
     if bm25 is None and len(df) <= 50000:
         bm25 = BM25Index.build(paper_text(df))
     index = NeighborIndex.load(out, embeddings, cfg)
+    phrase = PhraseIndex.load(out, len(df)) or PhraseIndex.from_frame(df)
+    acronyms = acronym_io.load(out) or acronym_io.mine(df["abstract"].astype(str))
     return Bundle(df, embeddings, labels, clusters_meta, growth, sparse_leads, meta,
-                  embedder, edges, neighbors, bm25, index, out, err)
+                  embedder, edges, neighbors, bm25, index, out, err, phrase, acronyms)
 
 
 def bundle_exists(cfg: Config) -> bool:

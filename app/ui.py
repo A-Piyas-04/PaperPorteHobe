@@ -226,6 +226,10 @@ _CSS = """
              padding: .18rem .6rem; font-size: .8125rem; font-weight: 650; }
   .sg-chip.area { background: var(--soft); color: #1f4fb8; }
   .sg-chip.cites { background: #fdf3e6; color: #8a4b08; }
+  .sg-chip.new { background: #e5f4ec; color: #17734c; }
+  .sg-chip.src { background: transparent; color: var(--muted); font-weight: 600; padding-left: 0; }
+  .sg-section { font-size: 1.125rem; font-weight: 800; color: var(--ink); margin: 1.4rem 0 .2rem; }
+  .sg-section span { color: var(--muted); font-weight: 600; font-size: .9375rem; margin-left: .5rem; }
   .sg-score { margin-left: auto; color: var(--muted); font-size: .8125rem; font-weight: 650; }
   .sg-card mark { background: #fff1c2; color: inherit; padding: 0 .1rem; border-radius: 3px; }
   a:focus-visible, button:focus-visible { outline: 3px solid #9ab8f5 !important; outline-offset: 2px; }
@@ -349,13 +353,38 @@ def get_config():
     return load_config()
 
 
-@st.cache_resource(show_spinner=False)
-def get_bundle():
+@st.cache_data(show_spinner=False, ttl=20)
+def _release_key() -> str:
+    """Changes when a new release is published (e.g. by the background grow job)."""
+    from scholargrid.release import resolve_bundle_dir
+
+    try:
+        path = resolve_bundle_dir(get_config())
+        meta = os.path.join(path, "meta.json")
+        return f"{path}|{os.path.getmtime(meta) if os.path.exists(meta) else 0}"
+    except Exception:
+        return "unknown"
+
+
+@st.cache_resource(show_spinner=False, max_entries=1)
+def _load_bundle(release_key: str):
     bundle = load_bundle(get_config())
     if get_config()["app"]["pre_warm"] and bundle.embedder is not None:
         with contextlib.suppress(Exception):
             bundle.embedder.encode_query("warm up")
     return bundle
+
+
+def get_bundle():
+    return _load_bundle(_release_key())
+
+
+def _clear_bundle() -> None:
+    _release_key.clear()
+    _load_bundle.clear()
+
+
+get_bundle.clear = _clear_bundle
 
 
 def ensure_loaded() -> None:
@@ -373,17 +402,25 @@ def bundle_version() -> str:
     return str(get_bundle().meta.get("generated_at", "v1"))
 
 
+@st.cache_resource(show_spinner=False, max_entries=1)
+def get_searcher(version: str):
+    """Collection + live-store searcher (one per bundle version, shared by sessions)."""
+    from scholargrid.live_search import LiveSearcher
+
+    return LiveSearcher(get_config(), get_bundle())
+
+
 @st.cache_data(show_spinner=False, max_entries=512)
 def run_search(version: str, query: str, top_k: int, filters: tuple = (), sort: str = "relevance",
                citation_weight: float = 0.0) -> dict:
-    """Cached search keyed by bundle version + query + filters."""
+    """Cached collection-only search (used by the research map)."""
     from scholargrid.search import SearchFilters, search
 
     b = get_bundle()
     f = SearchFilters(*filters) if filters else None
     return search(query, b.embedder, b.embeddings, b.df, b.labels, b.clusters_meta, top_k=top_k,
                   bm25=b.bm25, index=b.index, cfg=get_config(), filters=f, sort=sort,
-                  citation_weight=citation_weight)
+                  citation_weight=citation_weight, phrase_index=b.phrase, acronyms=b.acronyms)
 
 
 def max_query_chars() -> int:
@@ -425,9 +462,10 @@ def attribution_footer() -> None:
         "<div style='margin-top:2.5rem;padding-top:1rem;border-top:1px solid #e2e5ea;"
         "color:#566070;font-size:.8125rem;line-height:1.6'>"
         "Thank you to arXiv for use of its open access interoperability. Paper metadata from "
-        "<a href='https://arxiv.org' target='_blank' rel='noopener'>arXiv</a>; abstracts remain "
-        "under each paper's own licence, follow the links to read them on arXiv. Citation data from "
-        "<a href='https://openalex.org' target='_blank' rel='noopener'>OpenAlex</a> (CC0). "
+        "<a href='https://arxiv.org' target='_blank' rel='noopener'>arXiv</a>, "
+        "<a href='https://openalex.org' target='_blank' rel='noopener'>OpenAlex</a> (CC0) and "
+        "<a href='https://www.semanticscholar.org' target='_blank' rel='noopener'>Semantic Scholar</a>; "
+        "abstracts remain under each paper's own licence, follow the links to read them at the source. "
         "ScholarGrid is an exploration tool, not a judgment of research value."
         "</div>", unsafe_allow_html=True)
 
@@ -623,26 +661,55 @@ def _highlight(text: str, terms: Sequence[str]) -> str:
     return re.sub(rf"(?i)\b({pattern})\b", r"<mark>\1</mark>", escaped)
 
 
-def paper_card(title: str, arxiv_id: str, *, category: str | None = None,
+def paper_url(paper_id: str, url: str | None = None) -> str:
+    """Link for a paper: its own URL, else arXiv for bare arXiv IDs, else doi.org."""
+    pid = str(paper_id or "")
+    if url:
+        return str(url)
+    if pid.startswith("doi:"):
+        return f"https://doi.org/{pid[4:]}"
+    if ":" in pid:
+        return ""
+    return f"https://arxiv.org/abs/{pid}"
+
+
+_SOURCE_NAMES = {"arxiv": "arXiv", "openalex": "OpenAlex", "semantic_scholar": "Semantic Scholar"}
+
+
+def paper_card(title: str, paper_id: str, *, url: str | None = None, authors: str | None = None,
+               cites: int | None = None, category: str | None = None, venue: str | None = None,
                date=None, area: str | None = None, score: float | None = None,
-               snippet: str | None = None, delay: int = 0, terms: Sequence[str] = ()) -> None:
-    index = _paper_index(get_bundle().meta.get("generated_at", "v1"))
-    authors, cites = index.get(str(arxiv_id), ("", 0))
+               snippet: str | None = None, delay: int = 0, terms: Sequence[str] = (),
+               sources: Sequence[str] = (), new: bool = False) -> None:
+    if authors is None or cites is None:
+        index = _paper_index(get_bundle().meta.get("generated_at", "v1"))
+        a, c = index.get(str(paper_id), ("", 0))
+        authors = a if authors is None else authors
+        cites = c if cites is None else cites
     chips = ""
+    if new:
+        chips += "<span class='sg-chip new'>New · found online</span>"
     if cites:
         chips += f"<span class='sg-chip cites'>{cites:,} citation{'s' if cites != 1 else ''}</span>"
     if category:
         chips += f"<span class='sg-chip'>{html.escape(str(category))}</span>"
-    if date is not None:
-        chips += f"<span class='sg-chip'>{html.escape(fmt_date(date))}</span>"
+    if venue and not category:
+        chips += f"<span class='sg-chip'>{html.escape(str(venue)[:60])}</span>"
+    if date is not None and str(date):
+        chips += f"<span class='sg-chip'>{html.escape(fmt_date(date) if len(str(date)) > 4 else str(date))}</span>"
     if area:
         chips += f"<span class='sg-chip area'>{html.escape(area)}</span>"
+    shown = [_SOURCE_NAMES.get(s, s) for s in sources if s in _SOURCE_NAMES]
+    if shown:
+        chips += f"<span class='sg-chip src'>via {html.escape(' · '.join(shown))}</span>"
     if score is not None:
         chips += f"<span class='sg-score'>Ranking score {score:.3f}</span>"
+    link = paper_url(paper_id, url)
+    title_html = (f"<a href='{html.escape(link)}' target='_blank' rel='noopener'>{html.escape(str(title))}</a>"
+                  if link else html.escape(str(title)))
     body = (
         f"<div class='sg-card' style='animation-delay:{min(delay, 12) * 45}ms'>"
-        f"<div class='t'><a href='https://arxiv.org/abs/{html.escape(str(arxiv_id))}' "
-        f"target='_blank' rel='noopener'>{html.escape(str(title))}</a></div>"
+        f"<div class='t'>{title_html}</div>"
         + (f"<div class='a'>{html.escape(author_line(authors))}</div>" if authors else "")
         + f"<div class='m'>{chips}</div>"
     )

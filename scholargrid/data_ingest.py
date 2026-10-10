@@ -6,7 +6,8 @@ Builds a reproducible corpus of arXiv computer-science papers. Sources:
                    The whole file is streamed and filtered by category and date
                    while reading, so the configured window is actually covered.
 * ``oai_pmh``    - official date-ranged bulk harvest; incremental and resumable.
-* ``arxiv_api``  - the search API (newest papers only). Ad hoc demos.
+* ``arxiv_api``  - the search API, queried month by month across the window
+                   (resumable: finished months are cached per slice).
 * ``synthetic``  - deterministic, offline, topic-structured demo corpus.
 
 Bulk sources write into the Parquet/DuckDB store (:mod:`scholargrid.storage`)
@@ -22,14 +23,16 @@ weights recorded for growth reweighting.
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import math
 import os
 import time
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
-from datetime import UTC, date, datetime
-from typing import Dict, Iterator, List, Optional
+from datetime import UTC, date, datetime, timedelta
+from typing import Callable, Dict, Iterator, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -315,12 +318,95 @@ def _ingest_oai(cfg: Config, store) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Source: arXiv API (newest papers per query; demos only)
+# Source: arXiv API, harvested in monthly slices
 # ---------------------------------------------------------------------------
-_ATOM = {"a": "http://www.w3.org/2005/Atom", "arxiv": "http://arxiv.org/schemas/atom"}
+_ATOM = {"a": "http://www.w3.org/2005/Atom", "arxiv": "http://arxiv.org/schemas/atom",
+         "os": "http://a9.com/-/spec/opensearch/1.1/"}
+_ARXIV_API = "http://export.arxiv.org/api/query"
+_ARXIV_DELAY = 3.0             # arXiv asks for at most one request every 3 seconds
+_ARXIV_RETRIES = 4
+_OVERFETCH = 1.25              # cross-listed papers appear under several queries
+_SETTLE_DAYS = 3               # a month is cached once it ended this many days ago
+_last_arxiv_call = [0.0]
+_harvest_progress: Optional[Callable[[int, int, int], None]] = None
+
+
+def set_harvest_progress(fn: Optional[Callable[[int, int, int], None]]) -> None:
+    """Register ``fn(slices_done, slices_total, records_so_far)`` for long harvests."""
+    global _harvest_progress
+    _harvest_progress = fn
+
+
+def month_slices(start: date, end: date) -> List[Tuple[date, date]]:
+    out = []
+    cur = date(start.year, start.month, 1)
+    while cur <= end:
+        nxt = date(cur.year + cur.month // 12, cur.month % 12 + 1, 1)
+        out.append((max(cur, start), min(nxt - timedelta(days=1), end)))
+        cur = nxt
+    return out
+
+
+def arxiv_cache_dir(cfg: Config, quota: int) -> str:
+    """Per-slice cache folder; changes whenever the per-slice settings change."""
+    settings = {"quota": int(quota), "page": int(cfg["data"]["arxiv_page_size"]), "v": 1}
+    digest = hashlib.sha1(json.dumps(settings, sort_keys=True).encode()).hexdigest()[:10]
+    return os.path.join(cfg.raw_dir, "arxiv_api", digest)
 
 
 def _harvest_arxiv(cfg: Config) -> pd.DataFrame:
+    d = cfg["data"]
+    if d["arxiv_slice"] == "none":
+        return _harvest_arxiv_latest(cfg)
+    start = date.fromisoformat(d["date_start"])
+    end = min(date.fromisoformat(d["date_end"]), date.today())
+    queries = list(d["arxiv_queries"])
+    slices = month_slices(start, end)
+    if not queries or not slices:
+        raise IngestError("No arXiv queries or an empty date window")
+    cap = cfg.max_papers or _DEFAULT_CAP
+    quota = max(1, math.ceil(cap * _OVERFETCH / (len(queries) * len(slices))))
+    page = int(d["arxiv_page_size"])
+    cache_dir = arxiv_cache_dir(cfg, quota)
+    settled = date.today() - timedelta(days=_SETTLE_DAYS)
+    total, done, failed = len(queries) * len(slices), 0, 0
+    log.info("arXiv harvest: %d queries x %d months, up to %d papers per slice", len(queries),
+             len(slices), quota)
+    rows: List[Dict] = []
+    for query in queries:
+        for lo, hi in slices:
+            path = os.path.join(cache_dir, f"{_safe_name(query)}_{lo:%Y%m%d}_{hi:%Y%m%d}.json")
+            if d["use_cache"] and os.path.exists(path):
+                recs = load_json(path)
+            else:
+                try:
+                    recs = _harvest_query(query, quota, page=page, window=(lo, hi))
+                except Exception as exc:
+                    log.warning("arXiv slice %s %s..%s failed: %s", query, lo, hi, exc)
+                    failed += 1
+                    recs = []
+                else:
+                    if hi <= settled:
+                        save_json(recs, path)
+            rows.extend(recs)
+            done += 1
+            if _harvest_progress is not None:
+                _harvest_progress(done, total, len(rows))
+    if not rows:
+        raise IngestError("arXiv API returned no records")
+    if failed:
+        log.warning("%d of %d arXiv slices failed; run the pipeline again to fill them in "
+                    "(finished slices are cached).", failed, total)
+    log.info("Harvested %d raw records from the arXiv API (%d slices).", len(rows), total)
+    return pd.DataFrame(rows)
+
+
+def _safe_name(text: str) -> str:
+    return "".join(ch if ch.isalnum() else "_" for ch in text).strip("_")[:60]
+
+
+def _harvest_arxiv_latest(cfg: Config) -> pd.DataFrame:
+    """Newest papers per query, no date slicing (quick demos)."""
     d = cfg["data"]
     cache = os.path.join(cfg.raw_dir, "arxiv_harvest.csv")
     if d["use_cache"] and os.path.exists(cache):
@@ -335,7 +421,7 @@ def _harvest_arxiv(cfg: Config) -> pd.DataFrame:
     per_query = max(1, cap // max(1, len(d["arxiv_queries"])))
     rows: List[Dict] = []
     for query in d["arxiv_queries"]:
-        rows.extend(_harvest_query(query, per_query))
+        rows.extend(_harvest_query(query, per_query, page=int(d["arxiv_page_size"])))
     if not rows:
         raise IngestError("arXiv API returned no records")
     df = pd.DataFrame(rows)
@@ -345,23 +431,51 @@ def _harvest_arxiv(cfg: Config) -> pd.DataFrame:
     return df
 
 
-def _harvest_query(query: str, want: int, page: int = 100) -> List[Dict]:
+def _arxiv_call(params: Dict) -> ET.Element:
+    """One polite arXiv API request, retried with exponential backoff."""
+    url = _ARXIV_API + "?" + urllib.parse.urlencode(params)
+    req = urllib.request.Request(url, headers={"User-Agent": "ScholarGrid/2 (research landscape tool)"})
+    err: Optional[Exception] = None
+    for attempt in range(_ARXIV_RETRIES):
+        wait = _ARXIV_DELAY - (time.monotonic() - _last_arxiv_call[0])
+        if wait > 0:
+            time.sleep(wait)
+        _last_arxiv_call[0] = time.monotonic()
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                return ET.fromstring(resp.read())
+        except Exception as exc:  # HTTP errors, timeouts, truncated XML
+            err = exc
+            log.info("arXiv request failed (%s); retry %d/%d", exc, attempt + 1, _ARXIV_RETRIES - 1)
+            time.sleep(5 * 3 ** attempt)
+    raise IngestError(f"arXiv API kept failing: {err}")
+
+
+def _harvest_query(query: str, want: int, page: int = 100,
+                   window: Optional[Tuple[date, date]] = None) -> List[Dict]:
+    search = query
+    if window is not None:
+        lo, hi = window
+        search = f"({query}) AND submittedDate:[{lo:%Y%m%d}0000 TO {hi:%Y%m%d}2359]"
     out: List[Dict] = []
-    start = 0
+    start, empty_retries = 0, 0
     while len(out) < want:
-        params = {"search_query": query, "start": start,
-                  "max_results": min(page, want - len(out)),
-                  "sortBy": "submittedDate", "sortOrder": "descending"}
-        url = "http://export.arxiv.org/api/query?" + urllib.parse.urlencode(params)
-        with urllib.request.urlopen(url, timeout=30) as resp:
-            feed = ET.fromstring(resp.read())
+        feed = _arxiv_call({"search_query": search, "start": start,
+                            "max_results": min(page, want - len(out)),
+                            "sortBy": "submittedDate", "sortOrder": "descending"})
+        total = int(feed.findtext("os:totalResults", default="0", namespaces=_ATOM) or 0)
         entries = feed.findall("a:entry", _ATOM)
         if not entries:
+            # arXiv occasionally returns an empty page mid-way; retry a few times.
+            if start < total and empty_retries < 3:
+                empty_retries += 1
+                continue
             break
         out.extend(parse_atom_entry(e) for e in entries)
         start += len(entries)
-        time.sleep(3)
-    log.info("  %-12s -> %d records", query, len(out))
+        if start >= total:
+            break
+    log.info("  %-12s %s -> %d records", query, f"{window[0]}..{window[1]}" if window else "", len(out))
     return out
 
 

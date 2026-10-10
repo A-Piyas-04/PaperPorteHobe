@@ -1,0 +1,11 @@
+# ScholarGrid — public web deployment (what the Docker image serves).
+# Uses the release built from config.yaml; see Docs/deployment.md.
+
+extends: config.yaml
+environment: production
+
+data:
+  allow_synthetic_fallback: false
+
+app:
+  allow_grow: false              # visitors must not be able to start a 40-minute harvest

@@ -15,7 +15,7 @@ def _write(path, data):
 def test_default_config_loads_and_resolves():
     cfg = load_config()
     assert cfg["environment"] == "development"
-    assert cfg.max_papers == 1500
+    assert cfg.max_papers == 50000
     assert cfg.category_list() is None
 
 

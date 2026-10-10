@@ -18,6 +18,9 @@ data/processed/*
 # Pipeline stage outputs, embedding cache, published releases and the DuckDB store.
 data/stages/
 data/releases/
+data/live/
+data/grow_status.json
+data/grow.log
 *.duckdb
 *.duckdb.wal
 

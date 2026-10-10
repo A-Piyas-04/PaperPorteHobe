@@ -18,8 +18,9 @@ def make_config(tmp_path, **overrides) -> Config:
     """Synthetic, scikit-learn-only config writing everything under tmp_path."""
     cfg = load_config(os.path.join(ROOT, "configs", "config.yaml"))
     raw = cfg.raw
-    for key in ("raw_dir", "processed_dir", "reports_dir", "stages_dir", "releases_dir"):
+    for key in ("raw_dir", "processed_dir", "reports_dir", "stages_dir", "releases_dir", "live_dir"):
         raw["paths"][key] = str(tmp_path / key)
+    raw["search"]["live"] = False
     raw["data"].update(source="synthetic", profile="custom", max_papers=600,
                        date_start="2022-01-01", date_end="2025-12-31", language_filter=True)
     raw["enrich"]["openalex"] = False

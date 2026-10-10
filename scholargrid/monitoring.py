@@ -32,6 +32,7 @@ def init_error_tracking(component: str, release: str | None = None) -> bool:
 
 
 def capture_exception(exc: BaseException) -> None:
+    log.error("Unhandled exception", exc_info=(type(exc), exc, exc.__traceback__))
     if not _initialised:
         return
     import sentry_sdk  # type: ignore
