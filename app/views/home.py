@@ -68,8 +68,8 @@ def _landing(bundle) -> None:
     tour.render()
     with ui.panel("start-browsing"):
         ui.panel_header("Still choosing a topic?")
-        st.write("Browse readable research areas, then open a paper that interests you.")
-        if st.button("Browse research areas", use_container_width=True):
+        st.write("Open the connected research map to see how areas relate, then follow a paper that interests you.")
+        if st.button("Open the research map", use_container_width=True):
             ui.goto("explore")
     snap = bundle.meta.get("snapshot", {})
     st.caption(f"Searching {len(bundle.df):,} papers across {len(bundle.clusters_meta)} areas - "

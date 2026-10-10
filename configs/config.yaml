@@ -237,5 +237,6 @@ monitoring:
   stale_after_days: 14           # app shows a staleness banner after this
 
 app:
-  max_graph_nodes: 20000         # Explore renders at most this many papers (sampled per area)
+  max_graph_nodes: 20000         # Explore sends at most this many papers to the workspace (sampled per area)
+  max_area_papers: 400           # Map focuses on at most this many papers per area (most-cited first)
   pre_warm: true                 # load the bundle and embedding model at startup

@@ -207,6 +207,7 @@ class Monitoring(_Section):
 
 class App(_Section):
     max_graph_nodes: int = Field(default=20000, ge=100)
+    max_area_papers: int = Field(default=400, ge=10)
     pre_warm: bool = True
 
 

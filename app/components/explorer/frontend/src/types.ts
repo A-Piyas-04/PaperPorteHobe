@@ -18,7 +18,10 @@ export interface Area {
   id: number;
   name: string;
   color: string;
-  size: number;
+  size: number; // papers in the corpus for this area
+  rc?: number; // papers from this area rendered in the current sample
+  x?: number; // embedding centroid (only when rc > 0)
+  y?: number;
 }
 
 export interface Payload {
@@ -27,9 +30,20 @@ export interface Payload {
   edges: [number, number, number][];
   neighbors: Record<string, [number, number][]>;
   areas: Area[];
+  areaEdges: [number, number, number][]; // [areaId, areaId, summed weight]
   categories: [string, number][];
   sizeBy: "citations" | "links";
+  corpusTotal: number;
+  renderedTotal: number;
+  maxAreaPapers: number;
 }
+
+// Which nodes the map is currently drawing.
+export type Scope =
+  | { kind: "overview" }
+  | { kind: "area"; areaId: number }
+  | { kind: "search" }
+  | { kind: "paper"; root: number; depth: number };
 
 export interface Highlight {
   query: string;

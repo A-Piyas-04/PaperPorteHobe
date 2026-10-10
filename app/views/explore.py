@@ -77,9 +77,41 @@ def _payload(version: str, required: tuple[int, ...] = ()) -> tuple[dict, dict]:
         neighbors = {str(pos[int(k)]): [[pos[j], s] for j, s in v if j in pos]
                      for k, v in bundle.neighbors.items() if int(k) in pos}
 
-    areas = [{"id": int(c["cluster_id"]), "name": ui.area_name(clusters, c["cluster_id"]),
-              "color": colors[int(c["cluster_id"])], "size": int(c.get("size", 0))}
-             for c in sorted(clusters.values(), key=lambda c: -c.get("size", 0))]
+    # Rendered count and embedding centroid per area, for the overview bubbles.
+    rendered_count: dict[int, int] = {}
+    cx: dict[int, float] = {}
+    cy: dict[int, float] = {}
+    for p in papers:
+        cid = p["c"]
+        if cid < 0:
+            continue
+        rendered_count[cid] = rendered_count.get(cid, 0) + 1
+        cx[cid] = cx.get(cid, 0.0) + p["x"]
+        cy[cid] = cy.get(cid, 0.0) + p["y"]
+
+    areas = []
+    for c in sorted(clusters.values(), key=lambda c: -c.get("size", 0)):
+        cid = int(c["cluster_id"])
+        rc = rendered_count.get(cid, 0)
+        area = {"id": cid, "name": ui.area_name(clusters, cid),
+                "color": colors[cid], "size": int(c.get("size", 0)), "rc": rc}
+        if rc:
+            area["x"] = round(cx[cid] / rc, 4)
+            area["y"] = round(cy[cid] / rc, 4)
+        areas.append(area)
+
+    # Aggregated inter-area links for the overview graph (summed edge weight
+    # between distinct areas; similarity + bibliographic coupling, undirected).
+    paper_area = [p["c"] for p in papers]
+    pair_w: dict[tuple[int, int], float] = {}
+    for a, b, w in edges:
+        ca, cb = paper_area[a], paper_area[b]
+        if ca < 0 or cb < 0 or ca == cb:
+            continue
+        key = (ca, cb) if ca < cb else (cb, ca)
+        pair_w[key] = pair_w.get(key, 0.0) + float(w)
+    area_edges = [[a, b, round(w, 3)] for (a, b), w in pair_w.items()]
+
     cats = sub["primary_category"].value_counts().head(30)
     cited_share = float((sub["cited_by_count"] > 0).mean()) if len(sub) else 0.0
 
@@ -89,8 +121,12 @@ def _payload(version: str, required: tuple[int, ...] = ()) -> tuple[dict, dict]:
         "edges": edges,
         "neighbors": neighbors,
         "areas": areas,
+        "areaEdges": area_edges,
         "categories": [[str(k), int(v)] for k, v in cats.items()],
         "sizeBy": "citations" if cited_share >= 0.2 else "links",
+        "corpusTotal": int(len(df)),
+        "renderedTotal": int(len(keep)),
+        "maxAreaPapers": int(ui.get_config()["app"].get("max_area_papers", 400)),
     }
     return payload, pos
 

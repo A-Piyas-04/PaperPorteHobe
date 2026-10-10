@@ -10,10 +10,12 @@ interface Props {
   degree: number[];
   onSelect: (i: number) => void;
   onHover: (i: number | null) => void;
-  onArea: (id: number | null) => void;
+  onArea: (id: number) => void;
   onOpenArea: (id: number) => void;
   savedIds: string[];
   onSave: (id: string) => void;
+  showFocusConnections?: boolean;
+  onFocusConnections?: () => void;
 }
 
 const MAX_AUTHORS = 6;
@@ -97,6 +99,12 @@ export default function DetailPane(props: Props) {
           {props.savedIds.includes(p.id) ? "Remove from reading list" : "Save to reading list"}
         </button>
         <p className="muted">Saved for this session. Export from Reading list before leaving.</p>
+
+        {props.showFocusConnections && nbrs.length > 0 && props.onFocusConnections && (
+          <button className="focus-connections" onClick={props.onFocusConnections}>
+            Focus this paper&rsquo;s connections on the map →
+          </button>
+        )}
 
         {nbrs.length > 0 && (
           <>

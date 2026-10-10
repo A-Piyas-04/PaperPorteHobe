@@ -14,6 +14,7 @@ interface Props {
   onClear: () => void;
   onArea: (id: number | null) => void;
   onCategory: (cat: string | null) => void;
+  showFilters?: boolean;
 }
 
 export default function TopBar(props: Props) {
@@ -52,7 +53,7 @@ export default function TopBar(props: Props) {
         </button>
       </form>
 
-      <div className="filters">
+      {props.showFilters !== false && <div className="filters">
         <select
           value={props.areaFilter ?? ""}
           onChange={(e) => props.onArea(e.target.value === "" ? null : Number(e.target.value))}
@@ -78,7 +79,7 @@ export default function TopBar(props: Props) {
             Reset
           </button>
         )}
-      </div>
+      </div>}
 
       <div className="count">
         {props.query && !props.pending ? (
