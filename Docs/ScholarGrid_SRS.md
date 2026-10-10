@@ -1,3 +1,5 @@
+> **Documentation status (2026-10-10):** Original v1 requirements. The primary 2D-map interaction requirement is superseded by the area-and-paper workspace described in [the UX amendment](ux-review.md). Analytical requirements and research-evidence boundaries remain relevant.
+
 # Software Requirements Specification (SRS)
 ## ScholarGrid
 **Version:** 1.0  

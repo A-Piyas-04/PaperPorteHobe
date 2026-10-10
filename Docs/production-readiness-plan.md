@@ -1,3 +1,5 @@
+> **Documentation status (2026-10-10):** Historical roadmap and baseline. Unchecked boxes and dataset counts below are not current status. Several listed systems now exist; launch readiness still requires evidence. See [the current review](ux-review.md).
+
 # ScholarGrid — Production Readiness Plan
 
 How to take ScholarGrid from a working MVP (v1) to a usable, trustworthy,

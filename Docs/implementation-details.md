@@ -1,3 +1,5 @@
+> **Documentation status (2026-10-10):** Historical v1 reference. Its single-map UI and module inventory are superseded by the current code and [UX / architecture review](ux-review.md). Algorithm descriptions may still be useful.
+
 # ScholarGrid — Implementation Details
 
 Technical reference for **version 1** of ScholarGrid (the Research Landscape

@@ -1,3 +1,5 @@
+> **Documentation status (2026-10-10):** Historical implementation sequence, retained for project context. For current development use [Local development](next-instructions.md).
+
 # Research Landscape Explorer — Implementation Plan
 
 1. **Create the GitHub repo and project structure**
