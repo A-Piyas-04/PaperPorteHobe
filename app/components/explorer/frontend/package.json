@@ -10,7 +10,7 @@
     "test": "playwright test"
   },
   "dependencies": {
-    "@sigma/node-border": "^3.0.0",
+    "@sigma/node-border": "^4.0.0",
     "graphology": "^0.25.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
