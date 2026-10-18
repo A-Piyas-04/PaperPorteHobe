@@ -1,0 +1,934 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ScholarGrid — Architecture Atlas</title>
+<style>
+  :root{
+    --ink:#11151c; --muted:#5a6475; --line:#d9dee7; --bg:#f3f5f8; --card:#ffffff;
+    --data:#2f6feb;      --data-bg:#eaf1fe;
+    --ml:#7b57d6;        --ml-bg:#f1ecfd;
+    --pipe:#c96a10;      --pipe-bg:#fdf0e3;
+    --front:#0f8f62;     --front-bg:#e7f7f0;
+    --ops:#475569;       --ops-bg:#eef1f5;
+    --ext:#d1453b;       --ext-bg:#fdecea;
+    --store:#0b7f94;     --store-bg:#e6f5f8;
+    --radius:14px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:400 19px/1.55 "Inter","Segoe UI",system-ui,-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  /* ---------- layout ---------- */
+  .shell{display:grid; grid-template-columns:320px 1fr; gap:0; min-height:100vh}
+  nav{
+    position:sticky; top:0; align-self:start; height:100vh; overflow-y:auto;
+    background:#fff; border-right:1px solid var(--line); padding:28px 22px 40px;
+  }
+  nav .brand{font-size:26px; font-weight:800; letter-spacing:-.02em; line-height:1.15}
+  nav .brand span{display:block; font-size:15px; font-weight:600; color:var(--muted); margin-top:6px}
+  nav ol{list-style:none; margin:26px 0 0; padding:0; counter-reset:s}
+  nav li{counter-increment:s; margin:2px 0}
+  nav a{
+    display:flex; gap:12px; align-items:baseline; text-decoration:none; color:var(--ink);
+    font-size:17px; font-weight:600; padding:9px 12px; border-radius:10px;
+  }
+  nav a:before{content:counter(s); color:var(--muted); font-size:14px; font-weight:700; min-width:20px}
+  nav a:hover{background:var(--bg)}
+  main{padding:40px 48px 120px; max-width:1500px}
+  @media (max-width:1100px){
+    .shell{grid-template-columns:1fr}
+    nav{position:static; height:auto; border-right:none; border-bottom:1px solid var(--line)}
+    main{padding:28px 18px 80px}
+  }
+  /* ---------- typography ---------- */
+  h1{font-size:54px; line-height:1.05; letter-spacing:-.035em; margin:0 0 14px; font-weight:800}
+  h2{font-size:38px; line-height:1.1; letter-spacing:-.025em; margin:0 0 6px; font-weight:800}
+  h3{font-size:24px; margin:34px 0 14px; font-weight:750; letter-spacing:-.01em}
+  h4{font-size:19px; margin:22px 0 10px; font-weight:750; color:var(--muted); text-transform:uppercase; letter-spacing:.06em}
+  p{margin:0 0 14px; max-width:92ch}
+  .lead{font-size:23px; color:var(--muted); max-width:70ch; margin-bottom:26px}
+  .eyebrow{font-size:15px; font-weight:800; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); margin-bottom:10px}
+  code,.mono{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Consolas,monospace; font-size:.86em}
+  code{background:#eef1f5; padding:2px 7px; border-radius:6px; white-space:nowrap}
+  section{
+    background:var(--card); border:1px solid var(--line); border-radius:22px;
+    padding:38px 40px 44px; margin:0 0 30px;
+  }
+  @media (max-width:700px){ section{padding:24px 18px 30px} h1{font-size:38px} h2{font-size:28px} }
+  /* ---------- primitives ---------- */
+  .node{
+    background:#fff; border:2px solid var(--line); border-radius:var(--radius);
+    padding:14px 16px; font-weight:700; font-size:18px; line-height:1.3;
+  }
+  .node small{display:block; font-weight:500; font-size:14.5px; color:var(--muted); margin-top:5px; line-height:1.4}
+  .node .mono{display:block; font-weight:600; font-size:13.5px; color:var(--muted); margin-top:5px; word-break:break-all}
+  .t-data{border-color:var(--data); background:var(--data-bg)}
+  .t-ml{border-color:var(--ml); background:var(--ml-bg)}
+  .t-pipe{border-color:var(--pipe); background:var(--pipe-bg)}
+  .t-front{border-color:var(--front); background:var(--front-bg)}
+  .t-ops{border-color:var(--ops); background:var(--ops-bg)}
+  .t-ext{border-color:var(--ext); background:var(--ext-bg); border-style:dashed}
+  .t-store{border-color:var(--store); background:var(--store-bg)}
+  .chain{display:flex; flex-wrap:wrap; align-items:stretch; gap:10px; margin:18px 0 10px}
+  .chain>.node{flex:1 1 170px; min-width:150px}
+  .arrow{display:flex; align-items:center; font-size:26px; font-weight:800; color:var(--muted)}
+  .vchain{display:grid; gap:0; margin:18px 0}
+  .vchain .node{margin:0}
+  .varrow{justify-self:start; margin-left:34px; font-size:26px; color:var(--muted); line-height:1.1}
+  .grid{display:grid; gap:14px; margin:18px 0}
+  .g2{grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+  .g3{grid-template-columns:repeat(auto-fit,minmax(250px,1fr))}
+  .g4{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+  .lane{
+    display:grid; grid-template-columns:200px 1fr; gap:0; border:1px solid var(--line);
+    border-radius:var(--radius); overflow:hidden; margin:14px 0;
+  }
+  .lane>.lbl{
+    background:var(--bg); padding:18px; font-weight:800; font-size:17px; display:flex;
+    flex-direction:column; justify-content:center; gap:4px; border-right:1px solid var(--line);
+  }
+  .lane>.lbl em{font-style:normal; font-weight:600; font-size:14px; color:var(--muted)}
+  .lane>.body{padding:16px; display:flex; flex-wrap:wrap; gap:10px; align-items:center}
+  .lane>.body>.node{flex:0 1 auto; min-width:140px}
+  @media (max-width:760px){ .lane{grid-template-columns:1fr} .lane>.lbl{border-right:none; border-bottom:1px solid var(--line)} }
+  table{border-collapse:collapse; width:100%; margin:18px 0; font-size:17px}
+  th,td{text-align:left; padding:13px 14px; border-bottom:1px solid var(--line); vertical-align:top}
+  th{font-size:14px; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); font-weight:800}
+  tbody tr:hover{background:#fafbfd}
+  .pill{
+    display:inline-block; font-size:14px; font-weight:800; padding:4px 11px; border-radius:999px;
+    border:1.5px solid currentColor; white-space:nowrap;
+  }
+  .p-data{color:var(--data)} .p-ml{color:var(--ml)} .p-pipe{color:var(--pipe)}
+  .p-front{color:var(--front)} .p-ops{color:var(--ops)} .p-ext{color:var(--ext)} .p-store{color:var(--store)}
+  .kv{display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin:18px 0}
+  .kv div{background:var(--bg); border-radius:12px; padding:14px 16px}
+  .kv b{display:block; font-size:30px; letter-spacing:-.03em; line-height:1.1}
+  .kv span{font-size:14.5px; color:var(--muted); font-weight:600}
+  .callout{
+    border-left:6px solid var(--data); background:var(--data-bg); padding:16px 20px;
+    border-radius:0 12px 12px 0; margin:20px 0; font-size:18px; font-weight:600;
+  }
+  .callout.warn{border-color:var(--ext); background:var(--ext-bg)}
+  .callout.ml{border-color:var(--ml); background:var(--ml-bg)}
+  ul.tight{margin:10px 0 16px; padding-left:24px}
+  ul.tight li{margin:7px 0}
+  .legend{display:flex; flex-wrap:wrap; gap:12px; margin:8px 0 0}
+  .split{display:grid; grid-template-columns:1fr auto 1fr; gap:16px; align-items:center; margin:20px 0}
+  @media (max-width:900px){ .split{grid-template-columns:1fr} }
+  .col{border:1px solid var(--line); border-radius:var(--radius); padding:18px; background:#fcfdfe}
+  .col h5{margin:0 0 14px; font-size:20px; font-weight:800}
+  .gate{display:flex; gap:10px; align-items:center; font-weight:700; font-size:17px; margin:8px 0}
+  .gate .b{font-size:20px}
+  .seq{counter-reset:q; list-style:none; margin:18px 0; padding:0}
+  .seq li{
+    counter-increment:q; display:grid; grid-template-columns:48px 1fr; gap:16px;
+    padding:14px 0; border-bottom:1px dashed var(--line); align-items:start;
+  }
+  .seq li:before{
+    content:counter(q); background:var(--ink); color:#fff; border-radius:10px; font-weight:800;
+    font-size:19px; width:40px; height:40px; display:grid; place-items:center;
+  }
+  .seq b{font-size:19px; display:block}
+  .seq small{font-size:15.5px; color:var(--muted); display:block; margin-top:4px; line-height:1.5}
+  .tree{
+    font-family:"JetBrains Mono",ui-monospace,Consolas,monospace; font-size:15.5px; line-height:1.85;
+    background:#fbfcfe; border:1px solid var(--line); border-radius:var(--radius); padding:20px 22px;
+    overflow-x:auto; white-space:pre;
+  }
+  .tree b{color:var(--data)} .tree i{color:var(--muted); font-style:normal}
+  footer{color:var(--muted); font-size:16px; padding:0 48px 60px; max-width:1500px}
+  .anchor{scroll-margin-top:24px}
+</style>
+</head>
+<body>
+<div class="shell">
+<nav>
+  <div class="brand">ScholarGrid<span>Architecture Atlas · v2.0.0</span></div>
+  <ol>
+    <li><a href="#big">Big picture</a></li>
+    <li><a href="#stack">Technology map</a></li>
+    <li><a href="#repo">Code map</a></li>
+    <li><a href="#pipeline">Offline pipeline</a></li>
+    <li><a href="#analyze">Inside “analyze”</a></li>
+    <li><a href="#ml">The ML layer</a></li>
+    <li><a href="#storage">Where data lives</a></li>
+    <li><a href="#bundle">The artifact bundle</a></li>
+    <li><a href="#release">Releases &amp; rollback</a></li>
+    <li><a href="#validate">Validation gates</a></li>
+    <li><a href="#app">The web app</a></li>
+    <li><a href="#search">Search request flow</a></li>
+    <li><a href="#workspace">React workspace</a></li>
+    <li><a href="#config">Config &amp; secrets</a></li>
+    <li><a href="#ops">Deploy, CI &amp; ops</a></li>
+    <li><a href="#local">Local vs online</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<!-- ============ TITLE ============ -->
+<section class="anchor">
+  <div class="eyebrow">Research Landscape Explorer</div>
+  <h1>ScholarGrid, end to end</h1>
+  <p class="lead">A heavy <b>offline ML pipeline</b> turns arXiv computer-science metadata into a precomputed
+  landscape. A <b>thin Streamlit + React app</b> serves it and only ever embeds your query.</p>
+
+  <div class="kv">
+    <div><b>6</b><span>pipeline stages</span></div>
+    <div><b>35</b><span>Python modules</span></div>
+    <div><b>7</b><span>app pages</span></div>
+    <div><b>3</b><span>live paper sources</span></div>
+    <div><b>384-d</b><span>embedding space</span></div>
+    <div><b>0</b><span>database servers</span></div>
+  </div>
+
+  <h4>Colour key used in every diagram</h4>
+  <div class="legend">
+    <span class="pill p-data">Data / ingest</span>
+    <span class="pill p-ml">ML / analysis</span>
+    <span class="pill p-pipe">Pipeline orchestration</span>
+    <span class="pill p-store">Storage artifact</span>
+    <span class="pill p-front">App / frontend</span>
+    <span class="pill p-ops">Ops / CI / infra</span>
+    <span class="pill p-ext">External network service</span>
+  </div>
+</section>
+
+<!-- ============ 1 BIG PICTURE ============ -->
+<section id="big" class="anchor">
+  <div class="eyebrow">01</div>
+  <h2>Big picture: two machines, one handoff</h2>
+  <p class="lead">Everything expensive happens <b>before</b> deployment. The handoff between the two worlds
+  is a folder of files — a versioned <b>release bundle</b>.</p>
+
+  <div class="split">
+    <div class="col">
+      <h5>🛠 Build world &nbsp;<span class="pill p-pipe">offline</span></h5>
+      <p style="font-size:17px">Your PC, a worker, or GitHub Actions. Runs for minutes&nbsp;→&nbsp;hours.
+      Needs network + ML libraries + CPU.</p>
+      <div class="vchain">
+        <div class="node t-data">Harvest arXiv metadata<small>arXiv API · OAI-PMH · Kaggle snapshot · synthetic</small></div>
+        <div class="varrow">↓</div>
+        <div class="node t-ml">Embed → reduce → cluster → label<small>bge-small · UMAP · HDBSCAN · c-TF-IDF</small></div>
+        <div class="varrow">↓</div>
+        <div class="node t-ml">Growth · leads · graph · BM25 · phrases</div>
+        <div class="varrow">↓</div>
+        <div class="node t-pipe">Validate against gates</div>
+        <div class="varrow">↓</div>
+        <div class="node t-store">Publish release<span class="mono">data/releases/2026.10.10.4/</span></div>
+      </div>
+    </div>
+
+    <div class="arrow" style="justify-content:center; font-size:46px">➜</div>
+
+    <div class="col">
+      <h5>🌐 Serve world &nbsp;<span class="pill p-front">online</span></h5>
+      <p style="font-size:17px">Docker container or Hugging Face Space. Must answer in milliseconds.
+      Loads the bundle once, caches it in RAM.</p>
+      <div class="vchain">
+        <div class="node t-store">Mounted release bundle<small>read-only: papers, vectors, clusters, graph</small></div>
+        <div class="varrow">↓</div>
+        <div class="node t-front">Streamlit shell + 7 pages<span class="mono">app/streamlit_app.py</span></div>
+        <div class="varrow">↓</div>
+        <div class="node t-ml">Only live compute: <b>embed the query</b> + nearest-neighbour lookup</div>
+        <div class="varrow">↓</div>
+        <div class="node t-ext">Live fan-out per search<small>arXiv · OpenAlex · Semantic Scholar</small></div>
+        <div class="varrow">↓</div>
+        <div class="node t-store">Live store grows on disk<span class="mono">data/live/</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout">The deployed app never clusters, never reduces, never trains. That is the single
+  architectural rule the whole repo is built around (NFR-01).</div>
+</section>
+
+<!-- ============ 2 STACK ============ -->
+<section id="stack" class="anchor">
+  <div class="eyebrow">02</div>
+  <h2>Technology map — what is used for what</h2>
+
+  <div class="lane">
+    <div class="lbl">Presentation<em>what the user clicks</em></div>
+    <div class="body">
+      <div class="node t-front">Streamlit 1.54<small>pages, nav, widgets, caching</small></div>
+      <div class="node t-front">React 18 + TypeScript<small>custom component</small></div>
+      <div class="node t-front">Sigma.js 3 + Graphology<small>WebGL graph map</small></div>
+      <div class="node t-front">Plotly 6<small>trend &amp; area charts</small></div>
+      <div class="node t-front">Vite 6<small>bundles the component</small></div>
+    </div>
+  </div>
+
+  <div class="lane">
+    <div class="lbl">Retrieval<em>answering a query</em></div>
+    <div class="body">
+      <div class="node t-ml">Dense vectors<small>cosine over L2-normalised embeddings</small></div>
+      <div class="node t-ml">Okapi BM25<small>own implementation, SciPy sparse</small></div>
+      <div class="node t-ml">FAISS HNSW<small>ANN above 20k papers</small></div>
+      <div class="node t-ml">RRF fusion<small>dense ⊕ lexical</small></div>
+      <div class="node t-ml">Phrase + acronym index<small>exact-match section</small></div>
+    </div>
+  </div>
+
+  <div class="lane">
+    <div class="lbl">Machine learning<em>building the landscape</em></div>
+    <div class="body">
+      <div class="node t-ml">sentence-transformers<small>BAAI/bge-small-en-v1.5</small></div>
+      <div class="node t-ml">UMAP<small>8-d analysis + 2-d map</small></div>
+      <div class="node t-ml">HDBSCAN<small>density clustering</small></div>
+      <div class="node t-ml">scikit-learn<small>TF-IDF, SVD, PCA, DBSCAN, KMeans, metrics</small></div>
+      <div class="node t-ml">NumPy / SciPy<small>all vector math</small></div>
+    </div>
+  </div>
+
+  <div class="lane">
+    <div class="lbl">Data<em>storing papers</em></div>
+    <div class="body">
+      <div class="node t-store">Parquet + PyArrow<small>system of record, month partitions</small></div>
+      <div class="node t-store">DuckDB<small>embedded working store</small></div>
+      <div class="node t-store">NumPy .npy<small>embeddings, memory-mapped</small></div>
+      <div class="node t-store">JSON<small>clusters, growth, graph, meta</small></div>
+      <div class="node t-store">pandas 2.3<small>every in-process frame</small></div>
+    </div>
+  </div>
+
+  <div class="lane">
+    <div class="lbl">Platform<em>running it</em></div>
+    <div class="body">
+      <div class="node t-ops">Docker multi-stage<small>non-root, health-checked</small></div>
+      <div class="node t-ops">GitHub Actions<small>CI + weekly refresh</small></div>
+      <div class="node t-ops">Pydantic 2<small>config schema validation</small></div>
+      <div class="node t-ops">ruff · mypy · pytest · Playwright</div>
+      <div class="node t-ops">Sentry<small>optional, DSN-gated</small></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 3 REPO ============ -->
+<section id="repo" class="anchor">
+  <div class="eyebrow">03</div>
+  <h2>Code map — one module per concern</h2>
+
+  <div class="tree">
+<b>scholargrid/</b>            <i>reusable library — no Streamlit import anywhere</i>
+├─ config.py           <i>YAML + extends: + env secrets → Config; capability detection</i>
+├─ schema.py           <i>pydantic model that validates the merged config</i>
+├─ pipeline.py         <i>the 6-stage orchestrator + Context handoff</i>
+├─ data_ingest.py      <i>FR-01 harvest 4 sources, clean, dedup, stratified sample</i>
+├─ sources/            <i>live adapters: arxiv.py · openalex.py · semantic_scholar.py</i>
+├─ oai_pmh.py          <i>resumable date-ranged bulk harvest</i>
+├─ storage.py          <i>PaperStore: Parquet partitions + DuckDB + citation history</i>
+├─ quality.py          <i>per-build data-quality checks (can halt the build)</i>
+├─ enrich.py           <i>OpenAlex citations/venue/authors + citation velocity</i>
+├─ embeddings.py       <i>FR-02 Embedder (minilm | tfidf) + incremental vector cache</i>
+├─ index.py            <i>NeighborIndex: exact brute force | FAISS HNSW</i>
+├─ reduce.py           <i>FR-03/05 UMAP | PCA — analysis dims and map dims</i>
+├─ clustering.py       <i>FR-03 HDBSCAN | DBSCAN | KMeans + ARI stability</i>
+├─ cluster_match.py    <i>Hungarian matching → stable area IDs across refreshes</i>
+├─ labeling.py         <i>FR-04 c-TF-IDF keywords + representative papers</i>
+├─ growth.py           <i>FR-07 windowed growth, Poisson bootstrap CI, trend, backtest</i>
+├─ sparse.py           <i>FR-08 low-density “investigation leads”</i>
+├─ graph.py            <i>kNN paper graph + bibliographic-coupling boost</i>
+├─ bm25.py             <i>Okapi BM25 with bigram bonus + RRF</i>
+├─ phrase.py           <i>normalised phrase matching, 3 levels</i>
+├─ acronyms.py         <i>mines “… (SATD)” pairs → query expansion</i>
+├─ search.py           <i>FR-06 exact + related sections, filters, sorts</i>
+├─ live_search.py      <i>LiveSearcher: collection ⊕ 3 external sources, in parallel</i>
+├─ live_store.py       <i>papers found live, persisted with their vectors</i>
+├─ artifacts.py        <i>save_bundle / load_bundle — the handoff contract</i>
+├─ release.py          <i>versioned releases, manifest, changelog, rollback</i>
+├─ validation.py       <i>FR-15..18 metrics + publish gates + reports</i>
+├─ grow.py             <i>detached background pipeline + status file</i>
+├─ monitoring.py       <i>Sentry no-op wrapper</i>
+├─ judgments.py        <i>export/import graded relevance judgments</i>
+└─ text.py · utils.py  <i>normalisation, logging, seeding, JSON, cosine</i>
+
+<b>pipeline/</b>run_pipeline.py   <i>CLI entry → scholargrid.pipeline:main</i>
+<b>app/</b>
+├─ streamlit_app.py    <i>thin shell: page config, CSS, bundle load, navigation</i>
+├─ ui.py               <i>stylesheet + cached loaders + every shared component</i>
+├─ views/              <i>home · explore · areas · trends · leads · library · about · tour · onboarding</i>
+└─ components/explorer/<i>React workspace (Vite build served by Streamlit)</i>
+
+<b>configs/</b>              <i>config.yaml ← production.yaml ← refresh.yaml · ci.yaml · deploy.yaml</i>
+<b>data/</b>                 <i>raw · processed (staging) · releases · stages · live (all gitignored)</i>
+<b>tests/</b>                <i>14 suites: ingest, pipeline, search, growth, live, app smoke…</i>
+<b>Docs/</b>                 <i>SRS · deployment · runbook · implementation details · UX review</i>
+  </div>
+</section>
+
+<!-- ============ 4 PIPELINE ============ -->
+<section id="pipeline" class="anchor">
+  <div class="eyebrow">04</div>
+  <h2>The offline pipeline — 6 stages, resumable</h2>
+  <p class="lead">Every stage writes its output to <code>data/stages/</code>, so any stage can be re-run
+  alone from cached inputs.</p>
+
+  <div class="chain">
+    <div class="node t-pipe">1 · ingest<small>harvest → clean → dedup → sample</small></div>
+    <div class="arrow">→</div>
+    <div class="node t-pipe">2 · enrich<small>OpenAlex citations &amp; venues</small></div>
+    <div class="arrow">→</div>
+    <div class="node t-pipe">3 · embed<small>title + abstract → vectors</small></div>
+    <div class="arrow">→</div>
+    <div class="node t-pipe">4 · analyze<small>11 sub-steps → bundle</small></div>
+    <div class="arrow">→</div>
+    <div class="node t-pipe">5 · validate<small>metrics + gates</small></div>
+    <div class="arrow">→</div>
+    <div class="node t-pipe">6 · publish<small>versioned release</small></div>
+  </div>
+
+  <h3>Stage 1 · ingest — four interchangeable sources</h3>
+  <div class="chain">
+    <div class="node t-ext">arXiv search API<small>month-by-month slices, cached per slice</small></div>
+    <div class="node t-ext">arXiv OAI-PMH<small>resumable, used by weekly refresh</small></div>
+    <div class="node t-data">Kaggle snapshot<small>streamed JSON-lines backfill</small></div>
+    <div class="node t-data">synthetic<small>deterministic, offline, for CI &amp; demo</small></div>
+  </div>
+  <div class="chain">
+    <div class="node t-store">PaperStore upsert<small>one row per base arXiv ID, latest version wins</small></div>
+    <div class="arrow">→</div>
+    <div class="node t-data">clean_records<small>strip LaTeX · unicode fold · cs.* category test · date window · ≥200 chars · English score · dedup by ID + title key</small></div>
+    <div class="arrow">→</div>
+    <div class="node t-data">sample_corpus<small>stratified by category × month, water-fill quotas, records <code>sample_weight</code></small></div>
+    <div class="arrow">→</div>
+    <div class="node t-ops">quality.run_checks<small>span, per-month volume, category share, missing rate, row-count drift</small></div>
+  </div>
+  <div class="callout warn">A failed harvest <b>raises</b>. Falling back to synthetic data is only allowed when
+  <code>data.allow_synthetic_fallback</code> is true — production configs forbid it, and the app shows a banner
+  whenever synthetic data is being served.</div>
+
+  <h3>Stage 2 · enrich — citations from OpenAlex</h3>
+  <div class="chain">
+    <div class="node t-data">arXiv ID<small>→ DataCite DOI <code>10.48550/arxiv.&lt;id&gt;</code></small></div>
+    <div class="arrow">→</div>
+    <div class="node t-ext">OpenAlex works API<small>batches of 50 DOIs, polite pool via <code>OPENALEX_MAILTO</code></small></div>
+    <div class="arrow">→</div>
+    <div class="node t-store">openalex_cache.parquet<small>age-based refresh: &lt;3 m → 7 d · &lt;24 m → 30 d · older → 90 d</small></div>
+    <div class="arrow">→</div>
+    <div class="node t-data">citations · references · venue · authors · topic<small>+ appended history → <b>citation velocity</b></small></div>
+  </div>
+  <p>Network failures are tolerated: affected papers keep their last good values. An optional Semantic Scholar
+  cross-check runs when <code>S2_API_KEY</code> is set.</p>
+
+  <h3>Stage 3 · embed — one model for papers <em>and</em> queries</h3>
+  <div class="chain">
+    <div class="node t-data">paper_text<small><code>title + ". " + abstract</code></small></div>
+    <div class="arrow">→</div>
+    <div class="node t-ml">Embedder<small>backend <code>auto</code> → minilm if importable, else tfidf</small></div>
+    <div class="arrow">→</div>
+    <div class="node t-store">embeddings.npy<small>float16/32, L2-normalised</small></div>
+    <div class="arrow">→</div>
+    <div class="node t-store">embedder/<small>fingerprint + state, shipped in the bundle</small></div>
+  </div>
+  <div class="callout ml">The vector cache is keyed by <code>(arxiv_id, text hash, model, revision)</code>, so a
+  weekly refresh only embeds papers that are new or changed. The saved <code>query_prefix</code> guarantees the
+  app embeds queries exactly the way the corpus was built.</div>
+</section>
+
+<!-- ============ 5 ANALYZE ============ -->
+<section id="analyze" class="anchor">
+  <div class="eyebrow">05</div>
+  <h2>Inside stage 4 “analyze” — 11 sub-steps</h2>
+  <p class="lead">This is where the landscape is actually created. Each box is timed and its backend recorded
+  in <code>meta.json</code>.</p>
+
+  <ol class="seq">
+    <li><div><b>index</b> — build <code>NeighborIndex</code>
+      <small>Exact chunked inner product under 20k papers; FAISS <code>IndexHNSWFlat</code> above. ANN recall@25 is
+      measured against exact search on a sample and stored in the validation report.</small></div></li>
+    <li><div><b>reduce</b> — embeddings → <b>8 dimensions</b>
+      <small>UMAP (<code>n_neighbors 15</code>, <code>min_dist 0.0</code>), PCA fallback. Fitted on a 60k sample for huge corpora, the rest transformed.</small></div></li>
+    <li><div><b>cluster</b> — density clustering on the 8-d space
+      <small>HDBSCAN (leaf selection) → DBSCAN with k-distance <code>eps</code> → KMeans, in that order of preference. Noise is <b>kept</b> as cluster&nbsp;<code>-1</code>, never forced into a group.</small></div></li>
+    <li><div><b>match previous</b> — stable area IDs
+      <small>Hungarian assignment on Jaccard member overlap + centroid similarity against the last release. Matched areas inherit their old ID; merges and splits land in the user changelog.</small></div></li>
+    <li><div><b>stability</b> — subsample re-clustering
+      <small>Re-clusters under seeds <code>[0,1,2]</code>, reports mean ARI and per-cluster survival. ARI is a <b>required publish gate</b>.</small></div></li>
+    <li><div><b>label</b> — c-TF-IDF names + evidence
+      <small>Class-based TF-IDF over cluster-aggregated documents (BERTopic formulation) gives 8 keywords; the 5 papers nearest the cluster centroid are kept as visible justification.</small></div></li>
+    <li><div><b>project</b> — a <b>separate</b> 2-d map
+      <small>A second UMAP run used only for visualisation (<code>min_dist 0.1</code>). The 2-d map is deliberately never the analytical basis.</small></div></li>
+    <li><div><b>growth</b> — who is accelerating
+      <small>Per area and window (3/6/12 months): <code>recent/previous</code>, divided by the same ratio for the whole corpus, weighted by <code>sample_weight</code>. Poisson bootstrap (500 samples, 90% CI), stability across alternate reference dates (CV ≤ 0.5), plus a window-free Poisson log-linear trend. No smoothing; gated areas simply report nothing.</small></div></li>
+    <li><div><b>sparse</b> — investigation leads
+      <small>Low-density 2-d anchors bordering populated clusters → re-verified in high-dimensional space → nearby papers attached as evidence → kept only if still low-density under a majority of re-projections. Capped at 12 leads, disabled below <code>min_corpus_size</code>.</small></div></li>
+    <li><div><b>graph</b> — the paper network
+      <small><code>k=6</code> nearest neighbours per paper via the shared index (no n×n matrix ever materialised), weight boosted by shared references (bibliographic coupling, +0.15 each, capped). Output: undirected edge list + per-paper neighbour list.</small></div></li>
+    <li><div><b>bm25 · phrases · acronyms</b> — lexical side
+      <small>BM25 term-frequency matrix with frequent bigrams; normalised phrase text for millisecond substring scans; acronym pairs mined from abstracts (“self-admitted technical debt (SATD)”) for two-way query expansion.</small></div></li>
+  </ol>
+
+  <div class="chain">
+    <div class="node t-pipe">all 11 outputs + meta</div>
+    <div class="arrow">→</div>
+    <div class="node t-store"><code>save_bundle()</code><small>writes the full artifact set to <code>data/processed/</code> (staging)</small></div>
+  </div>
+</section>
+
+<!-- ============ 6 ML ============ -->
+<section id="ml" class="anchor">
+  <div class="eyebrow">06</div>
+  <h2>The ML layer — and its graceful degradation</h2>
+  <p class="lead">Every ML choice has a reproducible scikit-learn fallback. <code>auto</code> picks the preferred
+  library when importable; the resolved choice is recorded and shown in the app’s methodology tab.</p>
+
+  <table>
+    <thead><tr><th>Stage</th><th>Preferred</th><th>Fallback</th><th>Why it matters</th></tr></thead>
+    <tbody>
+      <tr><td><b>Embeddings</b></td><td>sentence-transformers <code>BAAI/bge-small-en-v1.5</code> · 384-d · 256 tokens</td><td>TF-IDF → TruncatedSVD 256 → L2</td><td>Semantic meaning of title + abstract; <b>same model embeds your query</b></td></tr>
+      <tr><td><b>ANN index</b></td><td>FAISS <code>IndexHNSWFlat</code> (M 32, efC 200, efS 128)</td><td>Exact chunked inner product</td><td>Sub-second retrieval above 20k papers; recall is measured, not assumed</td></tr>
+      <tr><td><b>Analysis reduction</b></td><td>UMAP → 8 dims</td><td>PCA → 8 dims</td><td>Density clustering fails in 384 dims</td></tr>
+      <tr><td><b>Clustering</b></td><td>HDBSCAN (leaf)</td><td>DBSCAN (k-distance eps) → KMeans</td><td>Research areas, with an honest “unassigned” bucket</td></tr>
+      <tr><td><b>Area naming</b></td><td>c-TF-IDF + centroid-nearest papers</td><td>—</td><td>Interpretable labels with visible evidence</td></tr>
+      <tr><td><b>Map projection</b></td><td>UMAP → 2 dims (separate run)</td><td>PCA → 2 dims</td><td>Visual landscape only, never the analysis basis</td></tr>
+      <tr><td><b>Lexical retrieval</b></td><td>Okapi BM25 + bigram bonus</td><td>—</td><td>Exact model/dataset/acronym names dense vectors miss</td></tr>
+      <tr><td><b>Fusion</b></td><td>Reciprocal Rank Fusion (k 60)</td><td>dense-only or lexical-only</td><td>Robust blend without score calibration</td></tr>
+      <tr><td><b>Re-ranking</b></td><td>cross-encoder <code>ms-marco-MiniLM-L-6-v2</code> <em>(off by default)</em></td><td>fused order</td><td>Optional precision boost on the top 50</td></tr>
+      <tr><td><b>Statistics</b></td><td>Poisson bootstrap CI · Poisson log-linear trend · ARI · silhouette · DBCV · NPMI</td><td>—</td><td>Turns “this looks hot” into an interval with a reliability flag</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout ml">If the embedding model cannot load at serve time, the bundle still loads with
+  <code>embedder=None</code> and search degrades to BM25 — flagged <code>degraded: true</code> and surfaced to the
+  user instead of failing.</div>
+</section>
+
+<!-- ============ 7 STORAGE ============ -->
+<section id="storage" class="anchor">
+  <div class="eyebrow">07</div>
+  <h2>Where every piece of data lives</h2>
+  <p class="lead">There is no database server and no cloud bucket. Everything is files on a disk; DuckDB is an
+  embedded file too.</p>
+
+  <table>
+    <thead><tr><th>Location</th><th>What</th><th>Written by</th><th>Read by</th><th>Lifetime</th></tr></thead>
+    <tbody>
+      <tr><td><code>data/raw/arxiv/year_month=…/part-0.parquet</code></td><td><b>System of record</b> — every harvested paper, partitioned by month of first submission</td><td>ingest (PaperStore)</td><td>ingest on later runs</td><td>permanent, merged on each refresh</td></tr>
+      <tr><td><code>data/scholargrid.duckdb</code></td><td>Working mirror of papers + citation history, for fast filtered reads</td><td>ingest / enrich</td><td>ingest</td><td>permanent (optional backend)</td></tr>
+      <tr><td><code>data/raw/arxiv_api/…</code>, <code>openalex_cache.parquet</code></td><td>Per-slice harvest cache, OpenAlex responses</td><td>ingest / enrich</td><td>same stages</td><td>cache, age-based refresh</td></tr>
+      <tr><td><code>data/stages/*.parquet · *.json</code></td><td>Per-stage handoff so any stage can re-run alone</td><td>every stage</td><td>the next stage</td><td>until overwritten</td></tr>
+      <tr><td><code>data/processed/</code></td><td><b>Staging bundle</b> — the freshly built artifact set</td><td>analyze</td><td>validate, publish</td><td>overwritten each run</td></tr>
+      <tr><td><code>data/releases/&lt;id&gt;/</code> + <code>CURRENT</code></td><td><b>Published bundles</b> with manifest + changelog</td><td>publish</td><td><b>the app</b></td><td>last 5 kept, pinned one survives</td></tr>
+      <tr><td><code>data/live/papers.parquet · vectors.npy · meta.json</code></td><td>Papers discovered by live search, with their embeddings</td><td>the app, at search time</td><td>the app</td><td>grows with use, survives restarts</td></tr>
+      <tr><td><code>data/live/query_cache/&lt;hash&gt;.json</code></td><td>One page of one source’s answer for one query</td><td>the app</td><td>the app</td><td>24 h TTL</td></tr>
+      <tr><td><code>reports/validation_report.{md,json}</code>, <code>validation_history.jsonl</code></td><td>Quality metrics per build, appended across releases</td><td>validate</td><td>humans, CI artifacts</td><td>permanent</td></tr>
+      <tr><td><code>data/grow_status.json · grow.log</code></td><td>Progress of a detached background build</td><td>background pipeline</td><td>the app’s About page</td><td>per run</td></tr>
+      <tr><td>Streamlit <code>session_state</code></td><td>Reading list, current query, tour step</td><td>the app</td><td>the app</td><td><b>session only — not durable</b></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============ 8 BUNDLE ============ -->
+<section id="bundle" class="anchor">
+  <div class="eyebrow">08</div>
+  <h2>The artifact bundle — the one contract</h2>
+  <p class="lead"><code>artifacts.save_bundle()</code> writes it; <code>artifacts.load_bundle()</code> reads it.
+  Nothing else crosses the offline/online boundary.</p>
+
+  <div class="grid g3">
+    <div class="node t-store">papers.parquet<small>all metadata + <code>cluster_id</code>, <code>x2d</code>, <code>y2d</code></small></div>
+    <div class="node t-store">papers.csv<small>convenience export, only ≤ 20k rows</small></div>
+    <div class="node t-store">embeddings.npy<small>N × 384, float16/32, memory-mapped above 512 MB</small></div>
+    <div class="node t-store">reduced.npy<small>N × 8 analytical space</small></div>
+    <div class="node t-store">clusters.json<small>label, keywords, size, representatives, growth, stability</small></div>
+    <div class="node t-store">growth.json<small>per area × window: counts, ratio, CI, flags</small></div>
+    <div class="node t-store">sparse.json<small>investigation leads + evidence papers</small></div>
+    <div class="node t-store">edges.json<small>undirected weighted paper graph</small></div>
+    <div class="node t-store">neighbors.json<small>top similar papers per paper</small></div>
+    <div class="node t-store">embedder/<small>fingerprint, query prefix, tfidf state</small></div>
+    <div class="node t-store">bm25_tf.npz + bm25_meta.json<small>sparse TF matrix + vocabulary</small></div>
+    <div class="node t-store">phrase_text.parquet<small>pre-normalised title/abstract text</small></div>
+    <div class="node t-store">acronyms.json<small>mined acronym → long-form pairs</small></div>
+    <div class="node t-store">faiss index<small>only when the ANN backend was used</small></div>
+    <div class="node t-store">meta.json<small>versions, config hash, seed, snapshot, <b>resolved backends</b>, counts, quality, timings</small></div>
+  </div>
+
+  <div class="callout warn">Bundles must come from a trusted source: the embedder state is a joblib file, and
+  joblib can execute code on load.</div>
+</section>
+
+<!-- ============ 9 RELEASE ============ -->
+<section id="release" class="anchor">
+  <div class="eyebrow">09</div>
+  <h2>Releases, pointers and rollback</h2>
+
+  <div class="chain">
+    <div class="node t-pipe">staging<span class="mono">data/processed/</span></div>
+    <div class="arrow">→</div>
+    <div class="node t-ops">gates checked<small>publish refuses a failing bundle unless <code>--force-publish</code></small></div>
+    <div class="arrow">→</div>
+    <div class="node t-store">data/releases/2026.10.10.4/<small>+ manifest.json + changelog.json</small></div>
+    <div class="arrow">→</div>
+    <div class="node t-store">CURRENT<small>text file naming the live release</small></div>
+    <div class="arrow">→</div>
+    <div class="node t-ops">prune<small>keep last 5 + any pinned</small></div>
+  </div>
+
+  <h4>How the app decides which bundle to serve</h4>
+  <div class="vchain">
+    <div class="node t-ops"><code>release.pin</code> in config, or <code>SCHOLARGRID_RELEASE</code> env<small>explicit override — this is the rollback switch</small></div>
+    <div class="varrow">↓ else</div>
+    <div class="node t-ops"><code>CURRENT</code> pointer<small>the newest published release</small></div>
+    <div class="varrow">↓ else</div>
+    <div class="node t-ops">the staging bundle<small>so a dev box works before anything is published</small></div>
+  </div>
+
+  <p>The app re-reads the pointer every <b>20 seconds</b> (a cached <code>_release_key</code>), so a publish
+  swaps the served data without a restart. Rollback is one line of config or
+  <code>python -m scholargrid.release rollback &lt;id&gt;</code>.</p>
+</section>
+
+<!-- ============ 10 VALIDATION ============ -->
+<section id="validate" class="anchor">
+  <div class="eyebrow">10</div>
+  <h2>Validation — what must be true to publish</h2>
+
+  <div class="grid g2">
+    <div class="col">
+      <h5>Measured every build</h5>
+      <h4 style="margin-top:4px">Cluster quality</h4>
+      <ul class="tight">
+        <li>silhouette · DBCV (sampled)</li>
+        <li>NPMI keyword coherence · keyword diversity</li>
+        <li>noise fraction</li>
+        <li>subsample stability (ARI)</li>
+      </ul>
+      <h4>Search quality</h4>
+      <ul class="tight">
+        <li>graded relevance 0/1/2 → <b>nDCG@10</b>, MRR, precision@10, recall@25</li>
+        <li>configured mode <em>vs</em> dense-only and lexical-only baselines</li>
+        <li>hand-made judgments override heuristic grades</li>
+      </ul>
+      <h4>Growth &amp; robustness</h4>
+      <ul class="tight">
+        <li>reliable / gated / unstable area counts, backtest hit rate</li>
+        <li>sparse-lead robustness across re-projections</li>
+        <li>ANN recall@25 vs exact</li>
+      </ul>
+    </div>
+    <div class="col">
+      <h5>Gates (thresholds live in config)</h5>
+      <div class="gate"><span class="b">🚦</span> <code>search_ndcg_at_10</code> ≥ 0.75 &nbsp;<span class="pill p-ext">required</span></div>
+      <div class="gate"><span class="b">🚦</span> <code>quality_checks</code> pass &nbsp;<span class="pill p-ext">required</span></div>
+      <div class="gate"><span class="b">🚦</span> <code>min_cluster_stability_ari</code> ≥ 0.5 &nbsp;<span class="pill p-ext">required</span></div>
+      <div class="gate"><span class="b">·</span> <code>search_precision_at_10</code> ≥ 0.85</div>
+      <div class="gate"><span class="b">·</span> <code>min_span_months</code> ≥ 24</div>
+      <div class="gate"><span class="b">·</span> <code>max_noise_fraction</code> ≤ 0.35</div>
+      <p style="margin-top:18px"><code>validation.enforce_gates</code> is <b>false</b> in development and
+      <b>true</b> in production, where a failing required gate stops the publish and the previous release
+      stays live.</p>
+      <h4>Outputs</h4>
+      <div class="chain" style="margin-top:4px">
+        <div class="node t-ops">validation_report.json</div>
+        <div class="node t-ops">validation_report.md</div>
+        <div class="node t-ops">validation_history.jsonl</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 11 APP ============ -->
+<section id="app" class="anchor">
+  <div class="eyebrow">11</div>
+  <h2>The web app — a thin shell over cached state</h2>
+
+  <div class="chain">
+    <div class="node t-front">app.py<small>Hugging Face Spaces shim, <code>runpy</code></small></div>
+    <div class="arrow">→</div>
+    <div class="node t-front">app/streamlit_app.py<small>page config · CSS · bundle load · navigation · error shield</small></div>
+    <div class="arrow">→</div>
+    <div class="node t-front">app/ui.py<small>stylesheet, cached loaders, panels, cards, tables, charts</small></div>
+    <div class="arrow">→</div>
+    <div class="node t-front">app/views/*.py<small>one <code>render()</code> per page</small></div>
+  </div>
+
+  <h4>Caching strategy — what is held where</h4>
+  <table>
+    <thead><tr><th>Cached object</th><th>Mechanism</th><th>Scope</th></tr></thead>
+    <tbody>
+      <tr><td>Config</td><td><code>@st.cache_resource</code></td><td>process-wide, forever</td></tr>
+      <tr><td>Release pointer</td><td><code>@st.cache_data(ttl=20)</code></td><td>re-checked every 20 s → hot swap</td></tr>
+      <tr><td>Bundle (frames, vectors, indexes)</td><td><code>@st.cache_resource(max_entries=1)</code></td><td>one copy shared by all users</td></tr>
+      <tr><td><code>LiveSearcher</code> + live store</td><td><code>@st.cache_resource</code></td><td>one per bundle version</td></tr>
+      <tr><td>Search results</td><td><code>@st.cache_data(max_entries=512)</code></td><td>per query + filters + sort</td></tr>
+      <tr><td>Workspace payload</td><td><code>@st.cache_resource(max_entries=4)</code></td><td>per bundle version</td></tr>
+      <tr><td>Reading list, current query, tour step</td><td><code>st.session_state</code></td><td>per browser session, <b>not durable</b></td></tr>
+    </tbody>
+  </table>
+
+  <h4>The seven pages</h4>
+  <div class="grid g3">
+    <div class="node t-front">Find papers<small><code>home.py</code> — search box, example queries, filters, sorts, exact + related sections, “load more”, save to reading list</small></div>
+    <div class="node t-front">Workspace<small><code>explore.py</code> — builds the bounded payload and hosts the React map/list</small></div>
+    <div class="node t-front">Areas<small><code>areas.py</code> — cluster cards from <code>clusters.json</code>, per-area detail</small></div>
+    <div class="node t-front">Trends<small><code>trends.py</code> — growth with windows, CIs and absolute counts; falls back to activity counts when history is short</small></div>
+    <div class="node t-front">Leads<small><code>leads.py</code> — sparse neighbourhoods, framed as leads, never proven gaps</small></div>
+    <div class="node t-front">Reading list<small><code>library.py</code> — session selection, CSV + BibTeX export</small></div>
+    <div class="node t-front">About<small><code>about.py</code> — methodology, resolved backends, provenance, “grow collection” button</small></div>
+  </div>
+  <div class="chain">
+    <div class="node t-ops">no bundle found → <code>onboarding.py</code><small>standalone first-run screen: build demo data offline, or start a real harvest</small></div>
+    <div class="node t-ops"><code>tour.py</code><small>4-step skippable, replayable intro</small></div>
+    <div class="node t-ops">global notices<small>staleness, synthetic data, degraded search</small></div>
+  </div>
+</section>
+
+<!-- ============ 12 SEARCH FLOW ============ -->
+<section id="search" class="anchor">
+  <div class="eyebrow">12</div>
+  <h2>One search, end to end</h2>
+  <p class="lead">This is the only hot path in the system — and the only place the app does ML.</p>
+
+  <ol class="seq">
+    <li><div><b>Clean &amp; expand the query</b>
+      <small>Trimmed to 300 chars, then expanded two ways with <b>mined acronyms</b> and configured synonyms:
+      “SATD” ⟷ “self-admitted technical debt”. Two forms are produced — normalised <code>phrases</code> for local
+      matching, and <code>api_phrases</code> for exact-phrase queries to external APIs.</small></div></li>
+    <li><div><b>Embed the query — once</b>
+      <small>Same <code>Embedder</code> the corpus was built with, plus the saved <code>query_prefix</code>. The vector
+      is reused by every subsequent step.</small></div></li>
+    <li><div><b>Search the local collection</b> <span class="pill p-ml">in-process</span>
+      <small><em>Dense:</em> cosine over all embeddings (full scan when small, otherwise the ANN index).
+      <em>Lexical:</em> BM25 scores with the bigram bonus. <em>Exact:</em> phrase index returns a match level —
+      <b>1</b> title, <b>2</b> abstract, <b>3</b> all content words within 8 words.</small></div></li>
+    <li><div><b>Fan out to three external sources — in parallel</b> <span class="pill p-ext">network</span>
+      <small>A thread pool hits arXiv, OpenAlex and Semantic Scholar at once. Hard deadline 10 s overall;
+      Semantic Scholar gets 6 s and is dropped if slower; a source that answers 429 is put on a 60 s cooldown;
+      every page is cached on disk for 24 h, so repeats and paging back are instant.</small></div></li>
+    <li><div><b>De-duplicate across sources</b>
+      <small>Identity by DOI, then arXiv ID, then normalised title + year (allowing a one-year preprint/publication
+      gap). Records from different sources are merged field by field.</small></div></li>
+    <li><div><b>Persist and embed the new papers</b>
+      <small>Unseen papers are upserted into <code>data/live/</code>. Up to 300 of them are embedded within a 4 s
+      budget; the rest get vectors on later searches. <b>The collection grows with use.</b></small></div></li>
+    <li><div><b>Rank into two honest sections</b>
+      <small><em>Exact</em> — ordered by match level, then by dense + lexical score.
+      <em>Related</em> — dense and BM25 rankings fused by Reciprocal Rank Fusion, then cut by an adaptive
+      threshold (mean + 2σ of the query’s similarity to the corpus, and halfway to the best match), so weak
+      matches are dropped rather than padded.</small></div></li>
+    <li><div><b>Post-process &amp; report</b>
+      <small>Optional citation boost and cross-encoder re-rank; sort by relevance / newest / most cited /
+      citation velocity; attach matched terms, cluster distribution (query ambiguity is <b>exposed</b>), source
+      status per API, totals, and the <code>degraded</code> flag.</small></div></li>
+  </ol>
+
+  <div class="lane">
+    <div class="lbl">Data touched<em>in order</em></div>
+    <div class="body">
+      <div class="node t-ml">query vector</div><div class="arrow">·</div>
+      <div class="node t-store">embeddings.npy</div><div class="arrow">·</div>
+      <div class="node t-store">bm25_tf.npz</div><div class="arrow">·</div>
+      <div class="node t-store">phrase_text</div><div class="arrow">·</div>
+      <div class="node t-store">acronyms.json</div><div class="arrow">·</div>
+      <div class="node t-ext">3 live APIs</div><div class="arrow">·</div>
+      <div class="node t-store">data/live/</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 13 WORKSPACE ============ -->
+<section id="workspace" class="anchor">
+  <div class="eyebrow">13</div>
+  <h2>The React workspace — a custom Streamlit component</h2>
+
+  <div class="split">
+    <div class="col">
+      <h5>Python → React (props)</h5>
+      <div class="vchain">
+        <div class="node t-front"><code>explore._payload()</code><small>cached per bundle version</small></div>
+        <div class="varrow">↓</div>
+        <div class="node t-data">node selection<small>≤ <code>max_graph_nodes</code> (20 000), sampled <b>per area by citations</b>; search hits are force-included</small></div>
+        <div class="varrow">↓</div>
+        <div class="node t-data">payload<small>papers (short keys <code>i,t,au,d,c,x,y,ci…</code>) · edges · neighbors · areas · areaEdges · categories · totals</small></div>
+        <div class="varrow">↓</div>
+        <div class="node t-front"><code>components.declare_component</code><small>serves <code>frontend/dist</code>, or the Vite dev server when <code>SCHOLARGRID_DEV=1</code></small></div>
+      </div>
+    </div>
+    <div class="arrow" style="justify-content:center; font-size:40px">⇄</div>
+    <div class="col">
+      <h5>React → Python (events)</h5>
+      <div class="vchain">
+        <div class="node t-front"><code>Streamlit.setComponentValue</code><small>every event carries a <code>nonce</code> so repeats are not swallowed</small></div>
+        <div class="varrow">↓</div>
+        <div class="node t-front"><code>search</code> · <code>clear</code> · <code>open_area</code> · <code>save</code></div>
+        <div class="varrow">↓</div>
+        <div class="node t-front">Streamlit reruns<small>search runs over the <b>full corpus</b>; matches are merged into the browsing sample</small></div>
+      </div>
+      <h4>Frontend modules</h4>
+      <div class="grid" style="grid-template-columns:1fr; gap:8px">
+        <div class="node t-front">App.tsx<small>scope state machine + history</small></div>
+        <div class="node t-front">MapView.tsx<small>Sigma.js + Graphology WebGL scene</small></div>
+        <div class="node t-front">TopBar · PaperList · DetailPane</div>
+      </div>
+    </div>
+  </div>
+
+  <h4>Map scopes — what is drawn at any moment</h4>
+  <div class="chain">
+    <div class="node t-front">overview<small>area bubbles sized by papers, linked by summed inter-area edge weight</small></div>
+    <div class="arrow">→</div>
+    <div class="node t-front">area<small>papers of one area, ≤ <code>max_area_papers</code> (400), most cited first</small></div>
+    <div class="arrow">→</div>
+    <div class="node t-front">search<small>only the current result set, framed by the camera</small></div>
+    <div class="arrow">→</div>
+    <div class="node t-front">paper<small>one root paper and its connections at depth n</small></div>
+  </div>
+  <p>Hover only previews a title; the selection changes on click. Mobile switches between list and detail.
+  <code>prefers-reduced-motion</code> is respected. Built with <b>Vite + tsc --noEmit</b>, tested with
+  <b>Playwright</b>, both in CI.</p>
+</section>
+
+<!-- ============ 14 CONFIG ============ -->
+<section id="config" class="anchor">
+  <div class="eyebrow">14</div>
+  <h2>Configuration &amp; secrets</h2>
+  <p class="lead">One YAML drives every stage. A file may <code>extends:</code> another and override only what
+  differs; the merged result is validated by a pydantic schema, so a typo fails fast.</p>
+
+  <div class="vchain">
+    <div class="node t-ops">configs/config.yaml<small>development baseline — small sample, permissive gates, synthetic fallback allowed</small></div>
+    <div class="varrow">↓ extends</div>
+    <div class="node t-ops">configs/production.yaml<small>Kaggle backfill, DuckDB, <code>minilm</code> + float16, strict quality, gates enforced, JSON logs</small></div>
+    <div class="varrow">↓ extends</div>
+    <div class="node t-ops">configs/refresh.yaml<small>same, but source = <code>oai_pmh</code> → the weekly incremental harvest</small></div>
+  </div>
+  <div class="chain">
+    <div class="node t-ops">configs/ci.yaml<small>offline nightly regression</small></div>
+    <div class="node t-ops">configs/deploy.yaml<small>what the container runs</small></div>
+  </div>
+
+  <h4>Everything parameterised in one place</h4>
+  <div class="grid g4">
+    <div class="node t-ops">seed: 42<small>reproducibility</small></div>
+    <div class="node t-ops">data.profile<small>dev 5k · standard 50k · full · custom</small></div>
+    <div class="node t-ops">backends<small><code>auto</code> / forced, per stage</small></div>
+    <div class="node t-ops">growth windows<small>3 · 6 · 12 months</small></div>
+    <div class="node t-ops">search budgets<small>deadlines, cooldowns, cache TTL</small></div>
+    <div class="node t-ops">validation gates<small>thresholds + required list</small></div>
+    <div class="node t-ops">release<small>keep_last, pin</small></div>
+    <div class="node t-ops">app limits<small>max_graph_nodes, max_area_papers, allow_grow</small></div>
+  </div>
+
+  <h4>Secrets — environment variables only, never in YAML</h4>
+  <table>
+    <thead><tr><th>Variable</th><th>Used for</th></tr></thead>
+    <tbody>
+      <tr><td><code>OPENALEX_MAILTO</code></td><td>OpenAlex polite pool (enrichment + live search)</td></tr>
+      <tr><td><code>S2_API_KEY</code></td><td>Semantic Scholar source and cross-check</td></tr>
+      <tr><td><code>SENTRY_DSN</code></td><td>Turns error tracking on; absent → no-op</td></tr>
+      <tr><td><code>SCHOLARGRID_ENV</code> · <code>SCHOLARGRID_CONFIG</code></td><td>Which environment / config file to load</td></tr>
+      <tr><td><code>SCHOLARGRID_RELEASE</code></td><td>Serve a specific release (rollback without editing files)</td></tr>
+      <tr><td><code>SCHOLARGRID_DEV</code></td><td>Load the Vite dev server instead of the built component</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============ 15 OPS ============ -->
+<section id="ops" class="anchor">
+  <div class="eyebrow">15</div>
+  <h2>Deployment, CI and operations</h2>
+
+  <h4>Container topology</h4>
+  <div class="chain">
+    <div class="node t-ops">builder stage<small>python:3.12-slim · venv · <b>CPU-only torch</b> · requirements · bakes the HF model into the image</small></div>
+    <div class="arrow">→</div>
+    <div class="node t-ops">runtime stage<small>non-root UID 1000 · <code>HF_HUB_OFFLINE=1</code> · code + configs only</small></div>
+    <div class="arrow">→</div>
+    <div class="node t-ops">port 8501<small>HEALTHCHECK on <code>/_stcore/health</code></small></div>
+    <div class="arrow">→</div>
+    <div class="node t-store">/app/data mounted<small>the published release lives outside the image</small></div>
+  </div>
+  <p>The baked model must be the one the served release was built with — <code>meta.json → embedding_model</code>
+  is the source of truth. Hosting options documented: own server behind Caddy/HTTPS, or a free Hugging Face Space.</p>
+
+  <h4>GitHub Actions — five jobs</h4>
+  <div class="grid g3">
+    <div class="node t-ops">lint<small>ruff + mypy</small></div>
+    <div class="node t-ops">test<small>pytest + coverage (14 suites, incl. Streamlit smoke)</small></div>
+    <div class="node t-ops">regression <em>(nightly)</em><small>full synthetic pipeline <b>with gates</b>, report uploaded</small></div>
+    <div class="node t-ops">frontend<small>npm ci → build → Playwright chromium</small></div>
+    <div class="node t-ops">audit<small>pip-audit + npm audit</small></div>
+    <div class="node t-ops">weekly refresh <em>(Mon 04:00 UTC)</em><small>OAI-PMH harvest → enrich → rebuild → validate → publish; opens an issue on failure, previous release stays live</small></div>
+  </div>
+
+  <h4>Running a build without blocking the app</h4>
+  <div class="chain">
+    <div class="node t-front">About page → “Grow collection”</div>
+    <div class="arrow">→</div>
+    <div class="node t-pipe"><code>grow.start()</code><small>spawns a detached <code>python -m scholargrid.pipeline --status-file …</code></small></div>
+    <div class="arrow">→</div>
+    <div class="node t-store">grow_status.json + grow.log<small>progress, pid, message, release</small></div>
+    <div class="arrow">→</div>
+    <div class="node t-front">app polls the status file<small>and picks up the new release when it publishes</small></div>
+  </div>
+
+  <h4>Guard rails already in place</h4>
+  <div class="grid g2">
+    <div class="node t-ops">Reproducibility<small>single seed, config hash, resolved backends and library versions recorded in every manifest</small></div>
+    <div class="node t-ops">Fail-safe publishing<small>gates refuse bad bundles; the live release is never replaced by a worse one</small></div>
+    <div class="node t-ops">Graceful degradation<small>missing ML library → sklearn fallback; missing model → BM25 search, flagged in the UI</small></div>
+    <div class="node t-ops">Honest framing<small>leads are never called gaps; growth without a valid interval is not shown; synthetic and stale data are announced</small></div>
+  </div>
+</section>
+
+<!-- ============ 16 LOCAL VS ONLINE ============ -->
+<section id="local" class="anchor">
+  <div class="eyebrow">16</div>
+  <h2>Local vs online — the honest boundary</h2>
+
+  <div class="split">
+    <div class="col">
+      <h5>🖥 Runs locally / in-process</h5>
+      <ul class="tight">
+        <li>All clustering, reduction, labelling, growth statistics, lead detection</li>
+        <li>All embedding (model runs on your CPU/GPU, or the container’s)</li>
+        <li>All retrieval: dense, BM25, FAISS, phrase matching</li>
+        <li>All storage: Parquet, DuckDB, .npy, JSON — files on a disk</li>
+        <li>The whole app: Streamlit server + the React bundle it serves</li>
+      </ul>
+    </div>
+    <div class="arrow" style="justify-content:center; font-size:40px">│</div>
+    <div class="col">
+      <h5>🌐 Crosses the network</h5>
+      <ul class="tight">
+        <li><b>arXiv</b> — search API (build) and OAI-PMH (refresh); also a live search source</li>
+        <li><b>OpenAlex</b> — citations, references, venues, authors (build); also a live source</li>
+        <li><b>Semantic Scholar</b> — live source + optional cross-check (needs a key)</li>
+        <li><b>Hugging Face</b> — model download, once; baked into the image for production</li>
+        <li><b>Sentry</b> — error reports, only if a DSN is set, no personal data</li>
+      </ul>
+      <p style="font-size:17px; margin-top:8px"><b>Not used:</b> no managed database, no object storage, no queue,
+      no third-party auth, no analytics.</p>
+    </div>
+  </div>
+
+  <h4>Current state of this working tree</h4>
+  <div class="kv">
+    <div><b>1,275</b><span>papers in the live bundle</span></div>
+    <div><b>26</b><span>research areas</span></div>
+    <div><b>447</b><span>unassigned (noise)</span></div>
+    <div><b>5,975</b><span>graph edges</span></div>
+    <div><b>384</b><span>embedding dimensions</span></div>
+    <div><b>2026.10.10.4</b><span>current release</span></div>
+  </div>
+  <p style="color:var(--muted)">Resolved backends in this build: <code>minilm</code> · <code>umap</code> ·
+  <code>hdbscan</code> · <code>exact</code> index (recall@25 = 1.0). Dev config, <code>arxiv_api</code> source,
+  stratified sampling, gates not enforced.</p>
+</section>
+
+</main>
+</div>
+<footer>
+  ScholarGrid v2.0.0 — architecture atlas generated from the source tree.
+  Deeper references: <code>Docs/ScholarGrid_SRS.md</code> (requirements),
+  <code>Docs/implementation-details.md</code>, <code>Docs/deployment.md</code>, <code>Docs/runbook.md</code>.
+</footer>
+</body>
+</html>

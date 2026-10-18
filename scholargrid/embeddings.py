@@ -21,6 +21,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import time
 from typing import Any, List, Optional
 
 import numpy as np
@@ -196,28 +197,42 @@ class _EmbeddingCache:
         self.keys_path = os.path.join(self.dir, "keys.parquet")
         self.vec_path = os.path.join(self.dir, "vectors.npy")
 
-    def encode(self, ids: List[str], texts: List[str], fn) -> np.ndarray:
+    def encode(self, ids: List[str], texts: List[str], fn, chunk: int = 2000) -> np.ndarray:
+        """Embed papers not in the cache, saving after every ``chunk`` papers so an
+        interrupted run resumes where it stopped."""
         hashes = [text_hash(t) for t in texts]
         keys = [f"{i}:{h}" for i, h in zip(ids, hashes)]
-        known: dict = {}
-        vectors = None
+        stored: List[str] = []
+        vectors: Optional[np.ndarray] = None
         if os.path.exists(self.keys_path) and os.path.exists(self.vec_path):
             stored = pd.read_parquet(self.keys_path)["key"].tolist()
             vectors = np.load(self.vec_path)
-            known = {k: j for j, k in enumerate(stored)}
+            n = min(len(stored), len(vectors))  # an interrupted save can leave them unequal
+            stored, vectors = stored[:n], vectors[:n]
+        known = {k: j for j, k in enumerate(stored)}
         missing = [j for j, k in enumerate(keys) if k not in known]
         log.info("Embedding cache: %d reused, %d to embed.", len(keys) - len(missing), len(missing))
-        new_vecs = fn([texts[j] for j in missing]) if missing else None
-        dim = (new_vecs.shape[1] if new_vecs is not None else vectors.shape[1])  # type: ignore[union-attr]
-        out = np.zeros((len(keys), dim), dtype=np.float32)
-        for j, k in enumerate(keys):
-            if k in known:
-                out[j] = vectors[known[k]]  # type: ignore[index]
-        if new_vecs is not None:
-            out[missing] = new_vecs
-            ensure_dir(self.dir)
-            all_keys = list(known.keys()) + [keys[j] for j in missing]
-            all_vecs = new_vecs if vectors is None else np.vstack([vectors, new_vecs])
-            pd.DataFrame({"key": all_keys}).to_parquet(self.keys_path, index=False)
-            np.save(self.vec_path, all_vecs.astype(np.float32))
-        return out
+        t0 = time.monotonic()
+        for s in range(0, len(missing), chunk):
+            part = missing[s:s + chunk]
+            new_vecs = np.asarray(fn([texts[j] for j in part]), dtype=np.float32)
+            vectors = new_vecs if vectors is None else np.vstack([vectors, new_vecs])
+            for j in part:
+                known[keys[j]] = len(stored)
+                stored.append(keys[j])
+            self._save(stored, vectors)
+            done = s + len(part)
+            rate = done / max(time.monotonic() - t0, 1e-9)
+            log.info("Embedded %d / %d papers (%.0f/s, about %.0f min left).",
+                     done, len(missing), rate, (len(missing) - done) / rate / 60)
+        if vectors is None:
+            return np.zeros((0, 0), dtype=np.float32)
+        return vectors[[known[k] for k in keys]]
+
+    def _save(self, keys: List[str], vectors: np.ndarray) -> None:
+        ensure_dir(self.dir)
+        pd.DataFrame({"key": keys}).to_parquet(self.keys_path + ".tmp", index=False)
+        with open(self.vec_path + ".tmp", "wb") as fh:
+            np.save(fh, vectors)
+        os.replace(self.keys_path + ".tmp", self.keys_path)
+        os.replace(self.vec_path + ".tmp", self.vec_path)
