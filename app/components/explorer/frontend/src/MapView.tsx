@@ -26,13 +26,57 @@ interface Props {
 }
 
 const INK = "#161a22";
-const DIM_NODE = "#dfe3ea";
-const DIM_LABEL = "#b7bdc9";
-const EDGE_FAINT = "#e7e9ee";
-const EDGE_FOCUS = "#8a93a3";
-const NOISE = "#cbd0d8";
+const DIM_NODE = "#e4e8ef";
+const DIM_LABEL = "#aeb5c2";
+const EDGE_FAINT = "#ccd4e2";
+const EDGE_FOCUS = "#3f6fd6";
+const NOISE = "#c3c9d4";
+const NODE_STROKE = "#ffffff";
+const LABEL_INK = "#1b2330";
 const FONT = "Inter, 'Segoe UI', system-ui, -apple-system, sans-serif";
 const noop = () => undefined;
+
+/**
+ * Label renderer with a soft rounded "pill" behind the text, so titles stay
+ * legible over a dense field of overlapping nodes instead of colliding into an
+ * unreadable pile of bare glyphs.
+ */
+function drawNodeLabel(
+  context: CanvasRenderingContext2D,
+  data: { x: number; y: number; size: number; label: string | null; color: string },
+  settings: { labelSize: number; labelFont: string; labelWeight: string; labelColor: { color?: string } },
+): void {
+  if (!data.label) return;
+  const size = settings.labelSize;
+  context.font = `${settings.labelWeight} ${size}px ${settings.labelFont}`;
+  const text = data.label.length > 64 ? data.label.slice(0, 63) + "…" : data.label;
+  const w = context.measureText(text).width;
+  const x = data.x + data.size + 7;
+  const y = data.y;
+  const padX = 7;
+  const h = size + 9;
+  const r = h / 2;
+  const bx = x - padX;
+  const bw = w + padX * 2;
+  const by = y - h / 2;
+
+  context.beginPath();
+  context.moveTo(bx + r, by);
+  context.arcTo(bx + bw, by, bx + bw, by + h, r);
+  context.arcTo(bx + bw, by + h, bx, by + h, r);
+  context.arcTo(bx, by + h, bx, by, r);
+  context.arcTo(bx, by, bx + bw, by, r);
+  context.closePath();
+  context.fillStyle = "rgba(255, 255, 255, 0.92)";
+  context.fill();
+  context.lineWidth = 1;
+  context.strokeStyle = "rgba(22, 26, 34, 0.10)";
+  context.stroke();
+
+  context.fillStyle = settings.labelColor.color || LABEL_INK;
+  context.textBaseline = "middle";
+  context.fillText(text, x, y);
+}
 
 type Scene =
   | { kind: "areas"; key: string; areas: Area[]; edges: [number, number, number][] }
@@ -132,25 +176,32 @@ export default function MapView(props: Props) {
         nodeProgramClasses: {
           bordered: createNodeBorderProgram({
             borders: [
+              // Outer selection halo (0 unless a node is picked).
               { size: { attribute: "ring", defaultValue: 0, mode: "pixels" }, color: { attribute: "ringColor" } },
+              // A constant white rim separates overlapping nodes so dense
+              // clusters read as distinct circles instead of one solid blob.
+              { size: { value: 1.6, mode: "pixels" }, color: { value: NODE_STROKE } },
               { size: { fill: true }, color: { attribute: "color" } },
             ],
             drawHover: noop,
           }),
         },
+        defaultDrawNodeLabel: drawNodeLabel,
         defaultDrawNodeHover: noop,
         renderEdgeLabels: false,
         labelFont: FONT,
-        labelSize: 12,
+        labelSize: 12.5,
         labelWeight: "600",
-        labelColor: { color: "#2b313c" },
-        labelDensity: 1,
-        labelGridCellSize: 75,
-        labelRenderedSizeThreshold: 6,
+        labelColor: { color: LABEL_INK },
+        // Fewer, better-spaced labels: only prominent nodes are titled, and the
+        // collision grid is coarse enough that pills rarely overlap.
+        labelDensity: 0.5,
+        labelGridCellSize: 150,
+        labelRenderedSizeThreshold: 9,
         zIndex: true,
         minCameraRatio: 0.05,
         maxCameraRatio: 3,
-        stagePadding: 60,
+        stagePadding: 70,
         nodeReducer: (node, attrs) => {
           const s = st.current;
           const res: Record<string, unknown> = { ...attrs };
@@ -160,9 +211,9 @@ export default function MapView(props: Props) {
           if (s.selected === null) return res;
           const sel = String(s.selected);
           if (node === sel) {
-            res.ring = 3;
-            res.ringColor = INK;
-            res.size = (attrs.size as number) + 2;
+            res.ring = 4;
+            res.ringColor = "#2f6feb";
+            res.size = (attrs.size as number) + 2.5;
             res.forceLabel = true;
             res.zIndex = 3;
           } else if (s.neighbors.has(node)) {
@@ -185,7 +236,7 @@ export default function MapView(props: Props) {
           const sel = String(s.selected);
           if (a === sel || b === sel) {
             res.color = EDGE_FOCUS;
-            res.size = (attrs.size as number) + 0.8;
+            res.size = (attrs.size as number) + 1.4;
             res.zIndex = 1;
           } else {
             res.hidden = true;
@@ -271,7 +322,7 @@ export default function MapView(props: Props) {
         g.addNode("a" + a.id, {
           x: a.x!,
           y: a.y!,
-          size: 10 + 20 * Math.sqrt(((a.rc ?? 1) - lo) / span),
+          size: 12 + 22 * Math.sqrt(((a.rc ?? 1) - lo) / span),
           color: a.color,
           label: a.name,
           ring: 0,
@@ -284,7 +335,7 @@ export default function MapView(props: Props) {
       for (const [a, b, w] of scene.edges) {
         const sa = "a" + a, sb = "a" + b;
         if (!g.hasNode(sa) || !g.hasNode(sb) || g.hasEdge(sa, sb)) continue;
-        g.addEdge(sa, sb, { size: 0.6 + ((w - wlo) / wspan) * 3.2, color: "#d4d8e0", zIndex: 0 });
+        g.addEdge(sa, sb, { size: 0.8 + ((w - wlo) / wspan) * 3.4, color: "#c6d0e2", zIndex: 0 });
       }
     } else {
       const ids = scene.ids;
@@ -303,7 +354,7 @@ export default function MapView(props: Props) {
         g.addNode(String(i), {
           x: p.x,
           y: p.y,
-          size: 4 + 9 * Math.pow((metric(i) - lo) / span, 0.9),
+          size: 4.5 + 9.5 * Math.pow((metric(i) - lo) / span, 0.9),
           color: p.c < 0 ? NOISE : colors.get(p.c) ?? NOISE,
           label: p.t,
           ring: 0,
@@ -316,7 +367,7 @@ export default function MapView(props: Props) {
       for (const [a, b, w] of scene.edges) {
         const sa = String(a), sb = String(b);
         if (!g.hasNode(sa) || !g.hasNode(sb) || g.hasEdge(sa, sb)) continue;
-        g.addEdge(sa, sb, { size: 0.5 + ((w - wlo) / wspan) * 1.4, color: EDGE_FAINT, zIndex: 0 });
+        g.addEdge(sa, sb, { size: 0.7 + ((w - wlo) / wspan) * 1.8, color: EDGE_FAINT, zIndex: 0 });
       }
     }
 
