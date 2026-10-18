@@ -19,6 +19,24 @@ def test_tfidf_roundtrip_without_pickle(cfg, tmp_path):
     assert np.allclose(loaded.transform(texts[:3]), vecs[:3], atol=1e-5)
 
 
+def test_embedder_mismatch_is_detected(cfg):
+    import pandas as pd
+
+    from scholargrid.artifacts import embedder_mismatch
+    from scholargrid.embeddings import paper_text
+
+    df = pd.DataFrame({"title": [f"Paper {i}" for i in range(40)],
+                       "abstract": [f"graph neural network {i} molecules" if i % 2 else
+                                    f"diffusion image synthesis {i}" for i in range(40)]})
+    emb = Embedder("tfidf", cfg)
+    vecs = emb.fit_transform(paper_text(df))
+    assert embedder_mismatch(emb, {"embedding_model": "tfidf"}, df, vecs) is None
+    assert "built with" in embedder_mismatch(emb, {"embedding_model": "other@abc"}, df, vecs)
+    other = np.random.default_rng(0).normal(size=vecs.shape).astype(np.float32)
+    assert "reproduce" in embedder_mismatch(emb, {}, df, other)
+    assert "-d vectors" in embedder_mismatch(emb, {}, df, vecs[:, :3])
+
+
 def test_embedding_cache_reuses_unchanged_texts(cfg):
     calls = []
 

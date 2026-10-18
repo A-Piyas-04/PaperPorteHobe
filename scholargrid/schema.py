@@ -222,6 +222,7 @@ class Release(_Section):
     enabled: bool = True
     keep_last: int = Field(default=5, ge=1)
     pin: Optional[str] = None
+    write_csv: bool = False
 
 
 class Monitoring(_Section):

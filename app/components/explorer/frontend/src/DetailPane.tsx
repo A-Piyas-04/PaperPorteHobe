@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Area, Payload } from "./types";
-import { arxivUrl, authorList, fmtDate, fmtInt, pdfUrl, shortAuthors } from "./util";
+import { arxivUrl, authorList, fmtDate, fmtInt, pdfUrl, sharedRefs, shortAuthors } from "./util";
 
 interface Props {
   data: Payload;
@@ -109,11 +109,12 @@ export default function DetailPane(props: Props) {
         {nbrs.length > 0 && (
           <>
             <div className="section-title">Continue with related papers</div>
-            <p className="muted">Connections use text similarity and may include shared references. They do not establish a research gap.</p>
+            <p className="muted">Every connection comes from similar title and abstract text; pairs that also cite the same works say how many references they share. Connections do not establish a research gap.</p>
             <div className="similar">
               {nbrs.map(([j, s]) => {
                 const q = data.papers[j];
                 const qa = props.areaById.get(q.c);
+                const common = sharedRefs(data, selected, j);
                 return (
                   <button
                     key={j}
@@ -125,7 +126,10 @@ export default function DetailPane(props: Props) {
                     <span className="dot" style={{ background: qa?.color ?? "#cfd3da" }} />
                     <span className="sim-body">
                       <span className="sim-title">{q.t}</span>
-                      <span className="sim-meta">{shortAuthors(q)} · similarity score {s.toFixed(2)}</span>
+                      <span className="sim-meta">
+                        {shortAuthors(q)} · similar content {s.toFixed(2)}
+                        {common > 0 && ` · shares ${common} reference${common === 1 ? "" : "s"}`}
+                      </span>
                     </span>
                   </button>
                 );

@@ -115,7 +115,9 @@ embedding:
   # the reproducible "tfidf" backend. Force with "minilm"/"tfidf".
   backend: auto
   model_name: "BAAI/bge-small-en-v1.5"
-  model_revision: null           # pin a Hugging Face commit hash in production
+  # Hugging Face commit hash. Pinned so query embeddings in the app always match
+  # the corpus; changing it (or the model) re-embeds every paper.
+  model_revision: "5c38ec7c405ec4b44b94cc5a9bb96e735b38267a"
   # bge models expect this instruction in front of queries (not documents).
   query_prefix: "Represent this sentence for searching relevant passages: "
   max_seq_length: 256            # title + abstract rarely need more; keeps CPU embedding fast
@@ -261,6 +263,7 @@ release:
   enabled: true
   keep_last: 5
   pin: null                      # serve this release id (rollback); or set SCHOLARGRID_RELEASE
+  write_csv: false               # also write papers.csv (<= 20k rows); the app only reads Parquet
 
 # ---------------------------------------------------------------------------
 # Operations

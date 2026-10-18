@@ -1,4 +1,17 @@
-import type { Paper } from "./types";
+import type { Paper, Payload } from "./types";
+
+const sharedCache = new WeakMap<Payload, Map<string, number>>();
+
+/** Number of references two papers both cite (0 when unknown or none). */
+export function sharedRefs(data: Payload, a: number, b: number): number {
+  let m = sharedCache.get(data);
+  if (!m) {
+    m = new Map();
+    for (const e of data.edges) if (e.length === 4) m.set(`${e[0]}-${e[1]}`, e[3]);
+    sharedCache.set(data, m);
+  }
+  return m.get(a < b ? `${a}-${b}` : `${b}-${a}`) ?? 0;
+}
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 

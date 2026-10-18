@@ -12,8 +12,13 @@ def render() -> None:
     bundle = ui.get_bundle()
     leads, clusters = bundle.sparse_leads, bundle.clusters_meta
 
-    ui.page_header("Leads", "Investigation leads",
+    ui.page_header("Leads · Experimental", "Investigation leads",
                    "Quiet spots right next to busy areas. Worth a look, not proven gaps.")
+    ui.note("<b>Experimental.</b> A lead is a part of the map where few collected papers sit close "
+            "to an active area, and that stays sparse across several re-projections. It can mean an "
+            "under-explored direction, but just as often it reflects what was sampled, how the map "
+            "was drawn, or work published under other names or outside arXiv. Treat each lead as a "
+            "question to check by reading the papers around it, not as a research gap.")
 
     if not leads:
         gate = bundle.meta.get("sparse_gate") or {}

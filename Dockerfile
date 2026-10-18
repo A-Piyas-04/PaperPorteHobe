@@ -16,11 +16,15 @@ RUN python -m venv /opt/venv \
     && /opt/venv/bin/pip install --index-url https://download.pytorch.org/whl/cpu torch \
     && /opt/venv/bin/pip install -r requirements.txt sentry-sdk
 # Bake the query-embedding model into the image so cold starts never hit the network.
-# It must be the model the served release was built with (meta.json "embedding_model");
-# for older MiniLM releases pass --build-arg EMBED_MODEL=sentence-transformers/all-MiniLM-L6-v2
+# EMBED_MODEL@EMBED_REVISION must equal the served release's meta.json "embedding_model"
+# (and configs/config.yaml embedding.model_name / model_revision). The app checks this at
+# startup and falls back to keyword search on a mismatch instead of serving wrong vectors.
+# For older MiniLM releases pass
+#   --build-arg EMBED_MODEL=sentence-transformers/all-MiniLM-L6-v2 --build-arg EMBED_REVISION=
 ARG EMBED_MODEL=BAAI/bge-small-en-v1.5
+ARG EMBED_REVISION=5c38ec7c405ec4b44b94cc5a9bb96e735b38267a
 ENV HF_HOME=/opt/hf
-RUN /opt/venv/bin/python -c "from sentence_transformers import SentenceTransformer as S; S('${EMBED_MODEL}')"
+RUN /opt/venv/bin/python -c "from sentence_transformers import SentenceTransformer as S; S('${EMBED_MODEL}', revision='${EMBED_REVISION}' or None)"
 
 FROM python:3.12-slim
 ENV PATH=/opt/venv/bin:$PATH \

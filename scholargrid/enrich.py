@@ -2,7 +2,10 @@
 
 Papers are matched by their arXiv DataCite DOI (``10.48550/arxiv.<id>``) in
 batches; optionally, unmatched papers fall back to an exact normalised-title
-lookup. Responses are cached in ``data/raw/openalex_cache.parquet`` and
+lookup. Once OpenAlex merges a preprint with its published version the work's
+canonical DOI is the publisher's, so results are mapped back to arXiv IDs via
+every location, not just the canonical DOI. Bare arXiv preprint records in
+OpenAlex usually carry no references; merged works do. Responses are cached in ``data/raw/openalex_cache.parquet`` and
 refreshed on an age-based schedule (young papers weekly, older ones monthly or
 quarterly), since citations accumulate as papers age. Every refresh appends to
 the citation history so the app can show citation velocity, not just totals.
@@ -10,8 +13,10 @@ Network failures are tolerated: affected papers keep their last good values.
 """
 from __future__ import annotations
 
+import http.client
 import json
 import os
+import re
 import time
 import urllib.error
 import urllib.parse
@@ -34,7 +39,10 @@ _USER_AGENT = "ScholarGrid/2.0 (mailto:{mailto})"
 ENRICH_COLUMNS = ["cited_by_count", "reference_count", "venue", "venue_type", "references",
                   "openalex_id", "author_ids", "topic", "citation_velocity"]
 _SELECT = ("id,doi,title,cited_by_count,counts_by_year,referenced_works,primary_location,"
-           "authorships,publication_date,type,primary_topic")
+           "locations,authorships,publication_date,type,primary_topic")
+# Bump to refetch every cached record (e.g. after a matching fix).
+_REC_VERSION = 2
+_ARXIV_URL = re.compile(r"(?:10\.48550/arxiv\.|arxiv\.org/(?:abs|pdf)/)(\S+?)(?:v\d+)?(?:\.pdf)?$")
 
 
 def enrich(df: pd.DataFrame, cfg: Config) -> pd.DataFrame:
@@ -153,6 +161,8 @@ def is_stale(entry: Optional[Dict], paper_date, today: date, cfg_enrich: Dict) -
         return True
     if not entry.get("rec"):
         return age >= int(cfg_enrich["miss_retry_days"])
+    if int(entry["rec"].get("v", 1)) < _REC_VERSION:
+        return True
     return age >= refresh_interval_days(paper_date, today, cfg_enrich["refresh_schedule"])
 
 
@@ -238,6 +248,12 @@ def _get(params: Dict[str, str], mailto: str) -> Dict:
                 time.sleep(2 ** attempt * 2)
                 continue
             raise
+        except (urllib.error.URLError, http.client.HTTPException, TimeoutError, ConnectionError,
+                json.JSONDecodeError):  # dropped connections and truncated bodies
+            if attempt < 3:
+                time.sleep(2 ** attempt * 2)
+                continue
+            raise
     raise RuntimeError("unreachable")
 
 
@@ -261,17 +277,37 @@ def parse_work(w: Dict) -> Dict:
         "publication_date": w.get("publication_date") or "",
         "type": w.get("type") or "",
         "topic": ((w.get("primary_topic") or {}).get("display_name") or ""),
+        "v": _REC_VERSION,
     }
+
+
+def work_arxiv_ids(w: Dict) -> set:
+    """Base arXiv IDs a work points to, from its DOI and every location URL."""
+    urls = [w.get("doi") or ""]
+    for loc in w.get("locations") or []:
+        urls += [loc.get("landing_page_url") or "", loc.get("pdf_url") or ""]
+    found = set()
+    for url in urls:
+        m = _ARXIV_URL.search(url.lower())
+        if m:
+            found.add(m.group(1))
+    return found
 
 
 def _fetch_by_doi(chunk: List[str], mailto: str) -> Dict[str, Dict]:
     doi_filter = "|".join(f"{_DOI_PREFIX}{a.lower()}" for a in chunk)
-    data = _get({"filter": f"doi:{doi_filter}", "per-page": str(len(chunk)), "select": _SELECT}, mailto)
+    # A paper can match both its bare preprint record and a merged published work.
+    per_page = str(min(200, 2 * len(chunk)))
+    data = _get({"filter": f"doi:{doi_filter}", "per-page": per_page, "select": _SELECT}, mailto)
+    wanted = {a.lower() for a in chunk}
     out: Dict[str, Dict] = {}
     for w in data.get("results", []):
-        doi = (w.get("doi") or "").lower()
-        if doi.startswith(_DOI_PREFIX):
-            out[doi[len(_DOI_PREFIX):]] = parse_work(w)
+        rec = parse_work(w)
+        for aid in work_arxiv_ids(w) & wanted:
+            prev = out.get(aid)
+            if prev is None or (len(rec["references"]), rec["cited_by_count"]) > \
+                    (len(prev["references"]), prev["cited_by_count"]):
+                out[aid] = rec
     return out
 
 

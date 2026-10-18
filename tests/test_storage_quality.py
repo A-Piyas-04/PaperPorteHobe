@@ -25,6 +25,17 @@ def test_store_upsert_dedups_and_reads_window(cfg, backend):
     assert sorted(march["arxiv_id"]) == ["a", "b"]
 
 
+def test_pruned_duckdb_is_rebuilt_from_parquet(cfg):
+    from scholargrid.storage import prune_duckdb
+
+    cfg.raw["storage"]["backend"] = "duckdb"
+    store = PaperStore(cfg)
+    store.upsert(_papers(["a", "b"], when="2024-03-05"))
+    assert prune_duckdb(cfg) > 0
+    store.upsert(_papers(["c"], when="2024-05-01"))
+    assert sorted(store.read()["arxiv_id"]) == ["a", "b", "c"]
+
+
 def test_citation_history_appends_and_dedups(cfg):
     store = PaperStore(cfg)
     store.append_citations(pd.DataFrame({"arxiv_id": ["a"], "snapshot_date": ["2024-01-01"],

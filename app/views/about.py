@@ -16,8 +16,9 @@ _STEPS = [
     ("Check", "Search quality, cluster quality and robustness are validated on every run."),
     ("Search", "Searches show papers containing your exact phrase (acronyms such as SATD are expanded) "
                "first, then papers with a similar meaning. Besides the collection, each search asks "
-               "arXiv, OpenAlex and Semantic Scholar live; papers found that way are kept, so the "
-               "collection grows with use."),
+               "arXiv, OpenAlex and Semantic Scholar live. Papers found that way are marked "
+               "“New · found online”; they are not part of the analyzed areas, map or trends "
+               "until the next data build."),
 ]
 
 
@@ -49,6 +50,9 @@ def render() -> None:
 - **Growth needs history.** Areas are only called growing when the evidence is strong enough;
   everything else shows counts only.
 - **Similar wording ≠ compatible science.**
+- **Areas, the map and Trends reflect the last data build**, not today. Search also checks the
+  live sources; papers found online are kept apart from the analyzed collection, and on hosted
+  versions they may be cleared when the app restarts.
 """)
 
     with ui.panel("dataset"):

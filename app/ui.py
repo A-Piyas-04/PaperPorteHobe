@@ -518,6 +518,34 @@ def growth_ready(bundle) -> bool:
     return history_days(bundle) >= 2 * int(g["default_window"]) * 30.4
 
 
+CITATION_COVERAGE_MIN = 0.1
+
+
+def citation_coverage(bundle) -> float:
+    """Share of collected papers with at least one citation."""
+    counts = bundle.meta.get("counts") or {}
+    papers = int(counts.get("papers") or len(bundle.df))
+    if not papers:
+        return 0.0
+    cited = counts.get("with_citations")
+    if cited is None:
+        cited = int((bundle.df["cited_by_count"] > 0).sum())
+    return float(cited) / papers
+
+
+def citations_ready(bundle) -> bool:
+    """True when enough papers have citation data for citation sorts/filters to mean anything."""
+    return citation_coverage(bundle) >= CITATION_COVERAGE_MIN
+
+
+def velocity_ready(bundle) -> bool:
+    """True when enough cited papers show citation change between snapshots."""
+    if not citations_ready(bundle) or "citation_velocity" not in bundle.df.columns:
+        return False
+    cited = bundle.df["cited_by_count"] > 0
+    return float((bundle.df.loc[cited, "citation_velocity"] > 0).mean()) >= CITATION_COVERAGE_MIN
+
+
 def growth_window(growth: dict, cid) -> dict:
     g = growth_of(growth, cid)
     if not g:
@@ -674,6 +702,9 @@ def paper_url(paper_id: str, url: str | None = None) -> str:
 
 
 _SOURCE_NAMES = {"arxiv": "arXiv", "openalex": "OpenAlex", "semantic_scholar": "Semantic Scholar"}
+NEW_CHIP = "New · found online"
+_NEW_TIP = ("Found by a live lookup, not in the analyzed collection. Not part of the areas, "
+            "map or trends until the next data build.")
 
 
 def paper_card(title: str, paper_id: str, *, url: str | None = None, authors: str | None = None,
@@ -688,7 +719,7 @@ def paper_card(title: str, paper_id: str, *, url: str | None = None, authors: st
         cites = c if cites is None else cites
     chips = ""
     if new:
-        chips += "<span class='sg-chip new'>New · found online</span>"
+        chips += f"<span class='sg-chip new' title='{html.escape(_NEW_TIP)}'>{NEW_CHIP}</span>"
     if cites:
         chips += f"<span class='sg-chip cites'>{cites:,} citation{'s' if cites != 1 else ''}</span>"
     if category:

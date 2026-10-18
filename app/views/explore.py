@@ -73,7 +73,7 @@ def _payload(version: str, required: tuple[int, ...] = ()) -> tuple[dict, dict]:
     if len(keep) == len(df):
         edges, neighbors = bundle.edges, bundle.neighbors
     else:
-        edges = [[pos[a], pos[b], w] for a, b, w in bundle.edges if a in pos and b in pos]
+        edges = [[pos[a], pos[b], *rest] for a, b, *rest in bundle.edges if a in pos and b in pos]
         neighbors = {str(pos[int(k)]): [[pos[j], s] for j, s in v if j in pos]
                      for k, v in bundle.neighbors.items() if int(k) in pos}
 
@@ -104,7 +104,7 @@ def _payload(version: str, required: tuple[int, ...] = ()) -> tuple[dict, dict]:
     # between distinct areas; similarity + bibliographic coupling, undirected).
     paper_area = [p["c"] for p in papers]
     pair_w: dict[tuple[int, int], float] = {}
-    for a, b, w in edges:
+    for a, b, w, *_ in edges:
         ca, cb = paper_area[a], paper_area[b]
         if ca < 0 or cb < 0 or ca == cb:
             continue

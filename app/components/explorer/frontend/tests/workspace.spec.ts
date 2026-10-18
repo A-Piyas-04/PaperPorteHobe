@@ -50,6 +50,13 @@ test("list view: keyboard selection, stable hover and related work", async ({ pa
   await expect(page.locator(".detail-title")).toHaveText("Research paper 1");
 });
 
+test("related papers explain whether they also share references", async ({ page }) => {
+  await render(page, { select: 0 });
+  await expect(page.locator(".sim-meta")).not.toContainText("shares");
+  await render(page, { select: 0, data: { ...data, edges: [[0, 1, .9, 3]] } });
+  await expect(page.locator(".sim-meta")).toContainText("similar content 0.80 · shares 3 references");
+});
+
 test("empty search falls back to unrelated papers on neither map nor list", async ({ page }) => {
   await render(page, { highlight: { query: "missing topic", items: [], req: 1 } });
   await expect(page.getByText("No papers matched this search", { exact: false })).toBeVisible();

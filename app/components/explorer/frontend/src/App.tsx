@@ -160,7 +160,7 @@ export default function App({ args }: { args: Args | null }) {
       <ul>
         <li><span className="lg-swatch" style={{ background: "#2f6feb" }} /><span className="lg-swatch" style={{ background: "#e8710a" }} /><span className="lg-swatch" style={{ background: "#1a9e6c" }} /> Colour groups papers into research areas.</li>
         <li><span className="lg-size" /> Node size reflects {data.sizeBy === "citations" ? "citations" : "number of connections"}.</li>
-        <li><span className="lg-edge" /> A link means two papers are textually similar (and may share references). It is not a citation or a confidence score.</li>
+        <li><span className="lg-edge" /> A link means two papers are textually similar; select a paper to see which links also share references. It is not a citation or a confidence score.</li>
       </ul>
       <p className="muted">Position comes from an embedding projection; screen distance is a rough guide to similarity, not a measure of research value or gaps.</p>
     </div>

@@ -5,7 +5,9 @@ the shared :class:`~scholargrid.index.NeighborIndex` (exact or ANN), so no
 n x n similarity matrix is ever materialised. When OpenAlex references are
 available, pairs that cite the same works get a weight boost (bibliographic
 coupling). Output is an undirected edge list plus a per-paper list of the most
-similar papers.
+similar papers. Edges are ``[a, b, weight]``, with a fourth element, the number
+of shared references, when the pair cites common works; bundles written before
+that have only three elements.
 """
 from __future__ import annotations
 
@@ -41,6 +43,7 @@ def build_graph(df: pd.DataFrame, embeddings: np.ndarray, cfg: Config,
                 for r in df["references"].tolist()]
 
     edges: Dict[Tuple[int, int], float] = {}
+    shared: Dict[Tuple[int, int], int] = {}
     neighbors: Dict[str, List] = {}
     for i in range(n):
         neighbors[str(i)] = [[int(j), round(float(s), 4)] for j, s in zip(nbr[i], sims[i])]
@@ -49,11 +52,14 @@ def build_graph(df: pd.DataFrame, embeddings: np.ndarray, cfg: Config,
             a, b = (i, j) if i < j else (j, i)
             w = float(s)
             if refs is not None and refs[a] and refs[b]:
-                w += min(len(refs[a] & refs[b]) * boost, 0.5)
+                common = len(refs[a] & refs[b])
+                if common:
+                    shared[(a, b)] = common
+                w += min(common * boost, 0.5)
             edges[(a, b)] = max(edges.get((a, b), 0.0), w)
 
-    edge_list = [[a, b, round(w, 4)] for (a, b), w in edges.items()]
-    coupled = sum(1 for (a, b) in edges if refs[a] & refs[b]) if refs is not None else 0
+    edge_list = [[a, b, round(w, 4)] + ([shared[(a, b)]] if (a, b) in shared else [])
+                 for (a, b), w in edges.items()]
     log.info("Built paper graph: %d edges (k=%d, index=%s), %d with shared references.",
-             len(edge_list), k, index.backend, coupled)
+             len(edge_list), k, index.backend, len(shared))
     return edge_list, neighbors

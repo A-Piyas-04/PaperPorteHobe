@@ -24,10 +24,14 @@ export interface Area {
   y?: number;
 }
 
+// [paper, paper, weight] plus the number of shared references when the pair
+// cites common works (older bundles never have the fourth element).
+export type Edge = [number, number, number] | [number, number, number, number];
+
 export interface Payload {
   version: string;
   papers: Paper[];
-  edges: [number, number, number][];
+  edges: Edge[];
   neighbors: Record<string, [number, number][]>;
   areas: Area[];
   areaEdges: [number, number, number][]; // [areaId, areaId, summed weight]

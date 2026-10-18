@@ -24,6 +24,7 @@ def test_bundle_shape(built):
     for name in ("papers.parquet", "embeddings.npy", "clusters.json", "growth.json", "meta.json",
                  "bm25_tf.npz", "edges.json", "embedder"):
         assert name in out
+    assert "papers.csv" not in out  # opt-in via release.write_csv
     b = load_bundle(cfg)
     assert len(b.df) == meta["counts"]["papers"] == len(b.embeddings)
     assert b.bm25 is not None and b.embedder is not None

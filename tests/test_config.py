@@ -52,6 +52,17 @@ def test_production_config_is_valid():
     assert cfg["validation"]["enforce_gates"] is True
 
 
+@pytest.mark.parametrize("name", ["production.yaml", "refresh.yaml", "deploy.yaml"])
+def test_production_embedding_revision_is_pinned(name):
+    import re
+
+    from scholargrid.embeddings import Embedder
+
+    cfg = load_config(os.path.join(REPO_ROOT, "configs", name))
+    fingerprint = Embedder("minilm", cfg).fingerprint
+    assert re.search(r"@[0-9a-f]{40}$", fingerprint), fingerprint
+
+
 def test_env_overrides(monkeypatch):
     monkeypatch.setenv("OPENALEX_MAILTO", "ops@example.org")
     monkeypatch.setenv("SCHOLARGRID_RELEASE", "2026.01.01")

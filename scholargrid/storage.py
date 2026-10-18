@@ -3,13 +3,17 @@
 * Raw layer: Parquet files partitioned by month of first submission,
   ``data/raw/arxiv/year_month=2025-03/part-0.parquet``. Always written.
 * Working store (``storage.backend: duckdb``): a single DuckDB file mirroring
-  the papers plus the citation history, used for fast filtered reads.
+  the papers plus the citation history, used for fast filtered reads. It is an
+  offline-only cache of the raw layer: the app never reads it, and when it is
+  deleted (``python -m scholargrid.storage prune``) it is rebuilt from the
+  Parquet partitions on the next upsert.
 
 Upserts keep one row per base arXiv ID (the latest version's metadata), so
 incremental harvests can be merged repeatedly without creating duplicates.
 """
 from __future__ import annotations
 
+import argparse
 import os
 from datetime import UTC, datetime
 from typing import List, Optional
@@ -74,7 +78,11 @@ class PaperStore:
             ensure_dir(os.path.dirname(path))
             _latest_per_id(part).to_parquet(path, index=False)
         if self.backend == "duckdb":
-            self._duck_upsert(data)
+            if os.path.exists(self.db_path):
+                self._duck_upsert(data)
+            else:
+                # A fresh mirror must hold the whole raw layer, not just this batch.
+                self._duck_upsert(self._parquet_read()[STORE_COLUMNS])
         log.info("Stored %d papers (%d partitions, backend=%s).",
                  len(data), data["year_month"].nunique(), self.backend)
         return len(data)
@@ -83,6 +91,10 @@ class PaperStore:
              columns: Optional[List[str]] = None) -> pd.DataFrame:
         if self.backend == "duckdb" and os.path.exists(self.db_path):
             return self._duck_read(start, end, columns)
+        return self._parquet_read(start, end, columns)
+
+    def _parquet_read(self, start: Optional[str] = None, end: Optional[str] = None,
+                      columns: Optional[List[str]] = None) -> pd.DataFrame:
         if not os.path.isdir(self.root):
             return pd.DataFrame(columns=columns or STORE_COLUMNS)
         frames = []
@@ -173,3 +185,31 @@ class PaperStore:
             return con.execute(sql, params).df()
         finally:
             con.close()
+
+
+def prune_duckdb(cfg: Config) -> int:
+    """Delete the DuckDB working store; returns the bytes freed. The Parquet raw
+    layer keeps every paper, and the mirror is rebuilt on the next upsert."""
+    path = cfg.abspath(cfg["storage"]["path"])
+    freed = 0
+    for p in (path, path + ".wal"):
+        if os.path.exists(p):
+            freed += os.path.getsize(p)
+            os.remove(p)
+    return freed
+
+
+def main(argv: Optional[List[str]] = None) -> None:
+    from .config import load_config
+
+    p = argparse.ArgumentParser(description="ScholarGrid paper store (offline only)")
+    p.add_argument("--config", default=None)
+    p.add_argument("cmd", choices=["prune"], help="prune: delete the DuckDB working store")
+    args = p.parse_args(argv)
+    freed = prune_duckdb(load_config(args.config))
+    print(f"Freed {freed / 1e6:,.0f} MB. Papers remain in the Parquet raw layer; the DuckDB "
+          "store is rebuilt from it on the next harvest.")
+
+
+if __name__ == "__main__":
+    main()

@@ -44,7 +44,7 @@ def _build_pages() -> dict:
                          url_path="areas"),
         "trends": st.Page(trends.render, title="Trends", icon=":material/trending_up:",
                           url_path="trends"),
-        "leads": st.Page(leads.render, title="Leads", icon=":material/lightbulb:",
+        "leads": st.Page(leads.render, title="Leads (experimental)", icon=":material/lightbulb:",
                          url_path="leads"),
         "library": st.Page(library.render, title="Reading list", icon=":material/bookmarks:",
                            url_path="reading-list"),

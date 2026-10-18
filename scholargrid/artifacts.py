@@ -21,7 +21,7 @@ from .config import Config
 from .embeddings import Embedder, paper_text
 from .index import NeighborIndex
 from .phrase import PhraseIndex
-from .utils import ensure_dir, get_logger, load_json, save_json
+from .utils import ensure_dir, get_logger, l2_normalize, load_json, save_json
 
 log = get_logger("artifacts")
 
@@ -38,6 +38,8 @@ META_JSON = "meta.json"
 EMBEDDER_DIR = "embedder"
 _CSV_MAX_ROWS = 20000
 _MMAP_MIN_BYTES = 512 * 1024 * 1024
+_PROBE_PAPERS = 3
+_PROBE_MIN_COSINE = 0.98
 
 _OPTIONAL_DEFAULTS = {"authors": "", "venue": "", "venue_type": "", "references": "",
                       "openalex_id": "", "author_ids": "", "topic": "",
@@ -70,7 +72,7 @@ def save_bundle(cfg: Config, df: pd.DataFrame, embeddings: np.ndarray,
     table["y2d"] = coords2d[:, 1]
     table.to_parquet(os.path.join(out, PAPERS_PARQUET), index=False)
     csv_path = os.path.join(out, PAPERS_CSV)
-    if len(table) <= _CSV_MAX_ROWS:
+    if cfg["release"]["write_csv"] and len(table) <= _CSV_MAX_ROWS:
         table.drop(columns=["references"], errors="ignore").to_csv(csv_path, index=False)
     elif os.path.exists(csv_path):
         os.remove(csv_path)
@@ -140,9 +142,34 @@ def load_papers(out: str) -> pd.DataFrame:
     return df
 
 
+def embedder_mismatch(embedder: Embedder, meta: Dict, df: pd.DataFrame,
+                      embeddings: np.ndarray) -> Optional[str]:
+    """Why ``embedder`` cannot serve queries against this bundle, or ``None``.
+
+    Re-embeds a few stored papers and compares them with their stored vectors,
+    which catches a different model, revision or weights even when the
+    dimensions happen to agree."""
+    expected = meta.get("embedding_model")
+    if expected and expected != embedder.fingerprint:
+        return f"bundle was built with {expected} but {embedder.fingerprint} is configured"
+    n = len(df)
+    if n == 0:
+        return None
+    idx = np.unique(np.linspace(0, n - 1, min(_PROBE_PAPERS, n)).astype(int))
+    fresh = embedder.transform(paper_text(df.iloc[idx]))
+    if fresh.shape[1] != embeddings.shape[1]:
+        return f"model gives {fresh.shape[1]}-d vectors, bundle stores {embeddings.shape[1]}-d"
+    stored = l2_normalize(np.asarray(embeddings[idx], dtype=np.float32))
+    worst = float((fresh * stored).sum(axis=1).min())
+    if worst < _PROBE_MIN_COSINE:
+        return f"model does not reproduce the stored paper vectors (cosine {worst:.3f})"
+    return None
+
+
 def load_bundle(cfg: Config, directory: Optional[str] = None) -> Bundle:
-    """Load a bundle. If the embedding model cannot be loaded the bundle still
-    loads with ``embedder=None`` so the app can fall back to BM25 search."""
+    """Load a bundle. If the embedding model cannot be loaded, or does not match
+    the one the bundle was built with, the bundle still loads with
+    ``embedder=None`` so the app falls back to BM25 search."""
     from .release import resolve_bundle_dir
 
     out = directory or resolve_bundle_dir(cfg)
@@ -162,9 +189,14 @@ def load_bundle(cfg: Config, directory: Optional[str] = None) -> Bundle:
     embedder, err = None, None
     try:
         embedder = Embedder.load(os.path.join(out, EMBEDDER_DIR), cfg)
+        err = embedder_mismatch(embedder, meta, df, embeddings)
     except Exception as exc:
         err = f"{type(exc).__name__}: {exc}"
-        log.error("Embedding model failed to load (%s); search will use BM25 only.", err)
+    if err:
+        embedder = None
+        log.error("Embedding model unusable for %s (%s); search will use BM25 only.", out, err)
+    else:
+        log.info("Serving %s with embedding model %s.", out, embedder.fingerprint)
 
     bm25 = BM25Index.load(out)
     if bm25 is None and len(df) <= 50000:

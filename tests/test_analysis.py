@@ -71,6 +71,22 @@ def test_parse_openalex_work_fixture():
     assert arxiv["venue"] == "" and arxiv["venue_type"] == "arxiv-only"
 
 
+def test_merged_openalex_work_maps_back_to_arxiv_id(monkeypatch):
+    from scholargrid import enrich as enrich_mod
+
+    preprint = {"id": "https://openalex.org/W1", "doi": "https://doi.org/10.48550/arxiv.2301.00808",
+                "type": "preprint", "cited_by_count": 5, "referenced_works": []}
+    merged = {"id": "https://openalex.org/W2", "doi": "https://doi.org/10.1109/cvpr.2023.01548",
+              "type": "conference-paper", "cited_by_count": 9,
+              "referenced_works": ["https://openalex.org/W7", "https://openalex.org/W8"],
+              "locations": [{"landing_page_url": "http://arxiv.org/abs/2301.00808v2",
+                             "pdf_url": "https://arxiv.org/pdf/2301.00808v2.pdf"}]}
+    monkeypatch.setattr(enrich_mod, "_get", lambda params, mailto: {"results": [preprint, merged]})
+    found = enrich_mod._fetch_by_doi(["2301.00808", "2301.99999"], "")
+    assert set(found) == {"2301.00808"}
+    assert found["2301.00808"]["openalex_id"] == "W2" and found["2301.00808"]["references"] == ["W7", "W8"]
+
+
 def test_refresh_schedule_by_age(cfg):
     sched = cfg["enrich"]["refresh_schedule"]
     today = date(2026, 1, 1)
@@ -78,9 +94,10 @@ def test_refresh_schedule_by_age(cfg):
     assert refresh_interval_days(pd.Timestamp("2025-01-01"), today, sched) == 30
     assert refresh_interval_days(pd.Timestamp("2020-01-01"), today, sched) == 90
     e = cfg["enrich"]
-    hit = {"at": "2025-12-20", "rec": {"cited_by_count": 1}}
+    hit = {"at": "2025-12-20", "rec": {"cited_by_count": 1, "v": 2}}
     assert is_stale(hit, pd.Timestamp("2025-12-01"), today, e)        # young: weekly
     assert not is_stale(hit, pd.Timestamp("2020-01-01"), today, e)    # old: quarterly
+    assert is_stale({**hit, "rec": {"cited_by_count": 1}}, pd.Timestamp("2020-01-01"), today, e)
     assert is_stale({"at": "2025-12-30", "rec": None}, pd.Timestamp("2020-01-01"), today, e)
     assert is_stale(None, pd.Timestamp("2020-01-01"), today, e)
 

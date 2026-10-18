@@ -91,19 +91,39 @@ def _landing(bundle) -> None:
                + f". Latest collected paper: {ui.fmt_date(snap.get('latest_included_date'))}.")
 
 
+def _sorts(bundle) -> dict:
+    hidden = set()
+    if not ui.citations_ready(bundle):
+        hidden |= {"most_cited", "citation_velocity"}
+    elif not ui.velocity_ready(bundle):
+        hidden.add("citation_velocity")
+    return {label: key for label, key in _SORTS.items() if key not in hidden}
+
+
 def _filters(bundle) -> tuple[tuple, str, float]:
     df = bundle.df
+    cited = ui.citations_ready(bundle)
+    sorts = _sorts(bundle)
+    if st.session_state.get("f_sort") not in sorts:
+        st.session_state.pop("f_sort", None)
     with st.expander("Filters and sorting"):
-        c1, c2, c3 = st.columns([1.3, 1.6, 1])
+        if cited:
+            c1, c2, c3 = st.columns([1.3, 1.6, 1])
+        else:
+            (c1, c2), c3 = st.columns([1.3, 2.6]), None
         lo, hi = _DATE_FLOOR, max(df["date"].max().date(), dt.date.today())
         dates = c1.date_input("Published between", value=(lo, hi), min_value=lo, max_value=hi,
                               key="f_dates")
         cats = df["primary_category"].value_counts().index.tolist()[:40]
         chosen = c2.multiselect("arXiv categories", cats, key="f_cats", placeholder="All categories")
-        min_cites = int(c3.number_input("Min. citations", min_value=0, value=0, step=1, key="f_cites"))
+        min_cites = (int(c3.number_input("Min. citations", min_value=0, value=0, step=1, key="f_cites"))
+                     if c3 is not None else 0)
         s1, s2 = st.columns([1, 1.4])
-        sort = _SORTS[s1.selectbox("Sort by", list(_SORTS), key="f_sort")]
-        boost = s2.toggle("Favour well-cited papers (age-adjusted)", key="f_boost")
+        sort = sorts[s1.selectbox("Sort by", list(sorts), key="f_sort")]
+        boost = s2.toggle("Favour well-cited papers (age-adjusted)", key="f_boost") if cited else False
+        if not cited:
+            s2.caption(f"Citation sorting is hidden: only {ui.citation_coverage(bundle):.0%} of the "
+                       "collected papers have citation data so far.")
     d_from = d_to = None
     if isinstance(dates, (list, tuple)) and len(dates) == 2:
         if dates[0] != lo:
@@ -306,6 +326,9 @@ def _results(bundle, query: str) -> None:
         if res.get("expansion"):
             notes.append("Also searched: " + ", ".join(f"“{t}”" for t in res["expansion"]) + ".")
         notes += _status_notes(res)
+        if any(r.get("is_new") for r in shown):
+            notes.append(f"Papers marked “{ui.NEW_CHIP}” were found online, not in the analyzed collection. "
+                         "They are not part of the areas, map or trends until the next data build.")
         if not similar and not exact:
             notes.insert(0, f"No paper contains the exact phrase “{query}”. "
                             "Showing papers with a similar meaning instead.")
