@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Graph from "graphology";
 import Sigma from "sigma";
 import { createNodeBorderProgram } from "@sigma/node-border";
+import { createNodeCompoundProgram } from "sigma/rendering";
+import SphereNodeProgram from "./SphereNode";
 import type { Area, Paper, Payload, Scope } from "./types";
 import { fmtInt, shortAuthors } from "./util";
 
@@ -33,8 +35,29 @@ const EDGE_FOCUS = "#3f6fd6";
 const NOISE = "#c3c9d4";
 const NODE_STROKE = "#ffffff";
 const LABEL_INK = "#1b2330";
+const ACCENT = "#2f6feb";
+const HOVER_RING = "#2f6feb";
 const FONT = "Inter, 'Segoe UI', system-ui, -apple-system, sans-serif";
 const noop = () => undefined;
+
+/**
+ * Compound node program: a sphere-shaded fill drawn first, then a border pass
+ * on top whose centre is transparent — so the shaded sphere shows through while
+ * the border still provides the white separating rim and the selection/hover
+ * halo (the `ring` / `ringColor` attributes).
+ */
+const BorderRing = createNodeBorderProgram({
+  borders: [
+    // Outer halo for selection/hover (0 unless a node sets `ring`).
+    { size: { attribute: "ring", defaultValue: 0, mode: "pixels" }, color: { attribute: "ringColor" } },
+    // Constant white rim that separates overlapping nodes.
+    { size: { value: 1.6, mode: "pixels" }, color: { value: NODE_STROKE } },
+    // Transparent centre lets the sphere fill underneath show.
+    { size: { fill: true }, color: { transparent: true } },
+  ],
+  drawHover: noop,
+});
+const NodeSphereProgram = createNodeCompoundProgram([SphereNodeProgram, BorderRing]);
 
 /**
  * Label renderer with a soft rounded "pill" behind the text, so titles stay
@@ -155,10 +178,17 @@ export default function MapView(props: Props) {
 
   // Mutable interaction state the reducers read, so hover/selection never
   // force a full React re-render of the renderer.
-  const st = useRef<{ selected: number | null; neighbors: Set<string>; hovered: string | null; scene: Scene }>({
+  const st = useRef<{
+    selected: number | null;
+    neighbors: Set<string>;
+    hovered: string | null;
+    hoverNeighbors: Set<string>;
+    scene: Scene;
+  }>({
     selected: null,
     neighbors: new Set(),
     hovered: null,
+    hoverNeighbors: new Set(),
     scene,
   });
   st.current.scene = scene;
@@ -172,20 +202,8 @@ export default function MapView(props: Props) {
     try {
       renderer = new Sigma(g, container, {
         allowInvalidContainer: true,
-        defaultNodeType: "bordered",
-        nodeProgramClasses: {
-          bordered: createNodeBorderProgram({
-            borders: [
-              // Outer selection halo (0 unless a node is picked).
-              { size: { attribute: "ring", defaultValue: 0, mode: "pixels" }, color: { attribute: "ringColor" } },
-              // A constant white rim separates overlapping nodes so dense
-              // clusters read as distinct circles instead of one solid blob.
-              { size: { value: 1.6, mode: "pixels" }, color: { value: NODE_STROKE } },
-              { size: { fill: true }, color: { attribute: "color" } },
-            ],
-            drawHover: noop,
-          }),
-        },
+        defaultNodeType: "sphere",
+        nodeProgramClasses: { sphere: NodeSphereProgram },
         defaultDrawNodeLabel: drawNodeLabel,
         defaultDrawNodeHover: noop,
         renderEdgeLabels: false,
@@ -205,25 +223,71 @@ export default function MapView(props: Props) {
         nodeReducer: (node, attrs) => {
           const s = st.current;
           const res: Record<string, unknown> = { ...attrs };
-          // Areas keep Sigma's collision-aware labelling (no forced labels),
-          // so the overview stays readable; hover shows any hidden name.
-          if (s.scene.kind === "areas") return res;
-          if (s.selected === null) return res;
-          const sel = String(s.selected);
-          if (node === sel) {
-            res.ring = 4;
-            res.ringColor = "#2f6feb";
-            res.size = (attrs.size as number) + 2.5;
-            res.forceLabel = true;
-            res.zIndex = 3;
-          } else if (s.neighbors.has(node)) {
-            res.forceLabel = true;
-            res.zIndex = 2;
-          } else {
-            res.color = DIM_NODE;
-            res.labelColor = DIM_LABEL;
-            res.label = "";
-            res.zIndex = 0;
+          const baseSize = attrs.size as number;
+          const hov = s.hovered;
+          const isHovered = hov === node;
+          const isHoverNeighbor = hov !== null && s.hoverNeighbors.has(node);
+
+          // ---- Research-area overview: light collision-aware labels, with a
+          // crisp hover lift so the pointed-at area pops. ----
+          if (s.scene.kind === "areas") {
+            if (isHovered) {
+              res.ring = 3.5;
+              res.ringColor = HOVER_RING;
+              res.size = baseSize + 3;
+              res.forceLabel = true;
+              res.zIndex = 5;
+            } else if (hov !== null && !isHoverNeighbor) {
+              res.zIndex = 0;
+            }
+            return res;
+          }
+
+          // ---- Papers: selection focus first, hover spotlight layered on. ----
+          const sel = s.selected !== null ? String(s.selected) : null;
+          if (sel !== null) {
+            if (node === sel) {
+              res.ring = 4;
+              res.ringColor = ACCENT;
+              res.size = baseSize + 2.5;
+              res.forceLabel = true;
+              res.zIndex = 3;
+            } else if (s.neighbors.has(node)) {
+              res.forceLabel = true;
+              res.zIndex = 2;
+            } else {
+              res.color = DIM_NODE;
+              res.labelColor = DIM_LABEL;
+              res.label = "";
+              res.zIndex = 0;
+            }
+          }
+
+          if (hov !== null) {
+            if (isHovered) {
+              // Restore full presence even if selection had dimmed it, then lift.
+              res.color = attrs.color;
+              res.label = attrs.label;
+              res.labelColor = LABEL_INK;
+              res.ring = Math.max((res.ring as number) || 0, 3.5);
+              res.ringColor = HOVER_RING;
+              res.size = baseSize + 3;
+              res.forceLabel = true;
+              res.zIndex = 6;
+            } else if (isHoverNeighbor) {
+              // Direct connections of the hovered node stay bright and titled.
+              res.color = attrs.color;
+              res.labelColor = LABEL_INK;
+              res.label = attrs.label;
+              res.forceLabel = true;
+              res.zIndex = Math.max((res.zIndex as number) || 0, 4);
+            } else if (sel === null) {
+              // Spotlight: with nothing selected, fade everything else back.
+              res.color = DIM_NODE;
+              res.labelColor = DIM_LABEL;
+              res.label = "";
+              res.zIndex = 0;
+            }
           }
           return res;
         },
@@ -231,8 +295,24 @@ export default function MapView(props: Props) {
           const s = st.current;
           const res: Record<string, unknown> = { ...attrs };
           if (s.scene.kind === "areas") return res;
-          if (s.selected === null) return res;
           const [a, b] = g.extremities(edge);
+          const hov = s.hovered;
+
+          // Hover takes precedence: trace only the hovered node's links.
+          if (hov !== null) {
+            if (a === hov || b === hov) {
+              res.color = EDGE_FOCUS;
+              res.size = (attrs.size as number) + 1.6;
+              res.zIndex = 5;
+              return res;
+            }
+            if (s.selected === null) {
+              res.hidden = true;
+              return res;
+            }
+          }
+
+          if (s.selected === null) return res;
           const sel = String(s.selected);
           if (a === sel || b === sel) {
             res.color = EDGE_FOCUS;
@@ -252,11 +332,17 @@ export default function MapView(props: Props) {
     renderer.on("enterNode", ({ node }) => {
       container.style.cursor = "pointer";
       st.current.hovered = node;
+      const hn = new Set<string>();
+      if (g.hasNode(node)) for (const nb of g.neighbors(node)) hn.add(nb);
+      st.current.hoverNeighbors = hn;
+      renderer.refresh({ skipIndexation: true });
       positionTip(renderer, node);
     });
     renderer.on("leaveNode", () => {
       container.style.cursor = "";
       st.current.hovered = null;
+      st.current.hoverNeighbors = new Set();
+      renderer.refresh({ skipIndexation: true });
       if (tipRef.current) tipRef.current.style.opacity = "0";
     });
     renderer.on("clickNode", ({ node }) => {
@@ -312,6 +398,11 @@ export default function MapView(props: Props) {
     const r = sigmaRef.current;
     if (!g || !r) return;
     g.clear();
+    // A scene rebuild invalidates any hovered node from the previous scene;
+    // clear it so stale hover state can't dim the new graph into blankness.
+    st.current.hovered = null;
+    st.current.hoverNeighbors = new Set();
+    if (tipRef.current) tipRef.current.style.opacity = "0";
 
     if (scene.kind === "areas") {
       const sizes = scene.areas.map((a) => a.rc ?? 1);
