@@ -26,7 +26,8 @@ def sample_queries(queries: list, n: int | None) -> list:
     by_area: dict = {}
     for q in queries:
         by_area.setdefault(q.get("area", ""), []).append(q)
-    picked, depth = [], 0
+    picked: list = []
+    depth = 0
     while len(picked) < n:
         for group in by_area.values():
             if depth < len(group) and len(picked) < n:

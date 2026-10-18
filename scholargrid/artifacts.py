@@ -192,7 +192,7 @@ def load_bundle(cfg: Config, directory: Optional[str] = None) -> Bundle:
         err = embedder_mismatch(embedder, meta, df, embeddings)
     except Exception as exc:
         err = f"{type(exc).__name__}: {exc}"
-    if err:
+    if err or embedder is None:
         embedder = None
         log.error("Embedding model unusable for %s (%s); search will use BM25 only.", out, err)
     else:
