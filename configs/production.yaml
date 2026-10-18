@@ -32,10 +32,6 @@ embedding:
 index:
   backend: auto
 
-cluster:
-  min_cluster_size: auto
-  min_cluster_fraction: 0.0008
-
 sparse:
   min_corpus_size: 20000
   robustness_seeds: [0, 1, 2, 3, 4]

@@ -151,8 +151,11 @@ reduce:
 
 cluster:
   backend: auto
-  min_cluster_size: 15           # integer, or "auto" (min_cluster_fraction of corpus)
-  min_cluster_fraction: 0.001
+  # integer, or "auto" (min_cluster_fraction of the corpus, at least 10). Areas need
+  # roughly 0.3% of the corpus for both growth windows to reach min_papers_per_period;
+  # on 48k papers 0.003 gives ~80 areas, a fixed 15 gave 600 areas with no reliable trend.
+  min_cluster_size: auto
+  min_cluster_fraction: 0.003
   min_samples: 5
   hdbscan_cluster_selection_method: leaf
   fallback_min_clusters: 4

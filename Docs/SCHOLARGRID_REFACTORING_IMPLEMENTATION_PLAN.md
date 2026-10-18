@@ -1,6 +1,23 @@
 # ScholarGrid — Refactoring & Implementation Plan
 
-**Status:** Planning only. No source code has been changed. Do not implement, delete, migrate, or refactor until this plan is reviewed and approved.
+**Status:** Option A approved and implemented (2026-10-18). Served release: `2026.10.18.2`. See [Implementation status](#implementation-status) below; the rest of the document is the original plan.
+
+### Implementation status
+
+| Task | Result |
+|---|---|
+| REF-01 corpus | Done. The 1,275-paper / 8-day release was a stale quick build; the cached harvest already covered 2023-01 → 2026-10. Two real defects were fixed on the way: (1) OpenAlex results were keyed by canonical DOI, so works OpenAlex had merged with their published version (publisher DOI) were silently dropped; they are now mapped back via every location, and cached records refetch once (`_REC_VERSION`). (2) `cluster.min_cluster_size: 15` was calibrated for ~1k papers; at 48k it gave 604 areas and 0 reliable trends, so it is now `auto` (0.3% of the corpus, benchmarked against 0.08–0.4% and `eom`). New release: 48,015 papers, 45 months, 77 areas, 20,973 with citations (was 1), 14,030 with references (was 0), 12,444 coupling edges, 39 areas with a reliable growth signal (was 0), ARI 0.71. |
+| REF-02 revision pin | Done. `bge-small-en-v1.5@5c38ec7c…` pinned in `config.yaml` (inherited by production/refresh/deploy) and baked by the Dockerfile (`EMBED_REVISION`); tested. |
+| REF-03 citation gating | Done. `ui.citations_ready` / `velocity_ready` (≥10% coverage) hide citation sorts, the min-citations filter and the boost toggle on citation-poor corpora. |
+| REF-04 judgments | Tooling done: `judgments export --sample N`, report and history split judged vs heuristic and label search gates "(heuristic grades)". **Open:** hand-grade `reports/judgments_todo.csv` (15 queries) and set a judged baseline. |
+| REF-05 live vs analyzed | Done. Results note, chip tooltip and About copy; "collection grows with use" removed. |
+| REF-06 startup check | Done. `artifacts.embedder_mismatch` compares fingerprints and re-embeds 3 stored papers (cosine ≥ 0.98); a mismatch falls back to BM25 with the existing banner. |
+| REF-07 CSV | Done. `release.write_csv: false` by default; CSV read fallback kept for old bundles. |
+| REF-08 leads | Done. "Leads (experimental)" in the More menu plus a caveat on the page. |
+| REF-09 DuckDB | Done. Docs updated; `python -m scholargrid.storage prune` added. Also fixed: a missing DuckDB file was recreated holding only the next upsert batch; it is now rebuilt from the Parquet layer. |
+| REF-10 edge types | Done. Edges carry an optional 4th element (shared references); the detail pane says "shares N references". Old 3-element bundles still work. |
+| REF-11, REF-12 | Deferred (optional). |
+| Known remaining | Noise fraction 0.43 (advisory gate 0.35); `quality_checks` failed only on the intended row-count jump vs. the 1,275-paper release; ~1,900 papers kept pre-fix OpenAlex records because OpenAlex rate-limited the run (set `OPENALEX_MAILTO`; they refresh on the next enrich). |
 
 **Audit basis:** Direct inspection of the repository at branch `main` (commit `cc57e7a`), plus the actual generated artifacts in `data/releases/2026.10.10.4/` and `data/live/`. Figures labelled **Measured** come from `meta.json` of that release; **Verified** means read directly from source; **Inferred** needs a benchmark or run to confirm; **Optional** is a possible improvement, not currently necessary.
 

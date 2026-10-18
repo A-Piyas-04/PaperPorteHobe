@@ -207,7 +207,7 @@ explicitly in `config.yaml` to force it.
 
 | File | Contents |
 |---|---|
-| `papers.csv` | one row per paper: `arxiv_id, title, abstract, categories, primary_category, date, year_month, cluster_id, x2d, y2d` |
+| `papers.parquet` | one row per paper: `arxiv_id, title, abstract, categories, primary_category, date, year_month, cluster_id, x2d, y2d` plus enrichment columns (`papers.csv` copy only with `release.write_csv: true`) |
 | `embeddings.npy` | float32 `[n_papers, dim]`, L2-normalised |
 | `reduced.npy` | float32 `[n_papers, 8]` (analytical space) |
 | `clusters.json` | per cluster: `label, keywords, size, representative_papers, top_categories, growth` |

@@ -511,7 +511,7 @@
     <thead><tr><th>Location</th><th>What</th><th>Written by</th><th>Read by</th><th>Lifetime</th></tr></thead>
     <tbody>
       <tr><td><code>data/raw/arxiv/year_month=…/part-0.parquet</code></td><td><b>System of record</b> — every harvested paper, partitioned by month of first submission</td><td>ingest (PaperStore)</td><td>ingest on later runs</td><td>permanent, merged on each refresh</td></tr>
-      <tr><td><code>data/scholargrid.duckdb</code></td><td>Working mirror of papers + citation history, for fast filtered reads</td><td>ingest / enrich</td><td>ingest</td><td>permanent (optional backend)</td></tr>
+      <tr><td><code>data/scholargrid.duckdb</code></td><td>Working mirror of papers + citation history, for fast filtered reads. Offline only, never deployed; rebuilt from the Parquet layer after <code>python -m scholargrid.storage prune</code></td><td>ingest / enrich</td><td>ingest</td><td>optional backend, prunable</td></tr>
       <tr><td><code>data/raw/arxiv_api/…</code>, <code>openalex_cache.parquet</code></td><td>Per-slice harvest cache, OpenAlex responses</td><td>ingest / enrich</td><td>same stages</td><td>cache, age-based refresh</td></tr>
       <tr><td><code>data/stages/*.parquet · *.json</code></td><td>Per-stage handoff so any stage can re-run alone</td><td>every stage</td><td>the next stage</td><td>until overwritten</td></tr>
       <tr><td><code>data/processed/</code></td><td><b>Staging bundle</b> — the freshly built artifact set</td><td>analyze</td><td>validate, publish</td><td>overwritten each run</td></tr>
@@ -534,13 +534,13 @@
 
   <div class="grid g3">
     <div class="node t-store">papers.parquet<small>all metadata + <code>cluster_id</code>, <code>x2d</code>, <code>y2d</code></small></div>
-    <div class="node t-store">papers.csv<small>convenience export, only ≤ 20k rows</small></div>
+    <div class="node t-store">papers.csv<small>opt-in export (<code>release.write_csv</code>), only ≤ 20k rows</small></div>
     <div class="node t-store">embeddings.npy<small>N × 384, float16/32, memory-mapped above 512 MB</small></div>
     <div class="node t-store">reduced.npy<small>N × 8 analytical space</small></div>
     <div class="node t-store">clusters.json<small>label, keywords, size, representatives, growth, stability</small></div>
     <div class="node t-store">growth.json<small>per area × window: counts, ratio, CI, flags</small></div>
     <div class="node t-store">sparse.json<small>investigation leads + evidence papers</small></div>
-    <div class="node t-store">edges.json<small>undirected weighted paper graph</small></div>
+    <div class="node t-store">edges.json<small>undirected weighted paper graph; <code>[a, b, w, shared refs]</code> when a pair cites common works</small></div>
     <div class="node t-store">neighbors.json<small>top similar papers per paper</small></div>
     <div class="node t-store">embedder/<small>fingerprint, query prefix, tfidf state</small></div>
     <div class="node t-store">bm25_tf.npz + bm25_meta.json<small>sparse TF matrix + vocabulary</small></div>
