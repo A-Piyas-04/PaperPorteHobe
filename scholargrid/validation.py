@@ -285,10 +285,13 @@ def _validate_search(cfg, df, embeddings, labels, clusters_meta, embedder, bm25,
         return round(float(np.mean(vals)), 4) if vals else None
 
     main = per_mode["configured"]
+    n_judged = sum(1 for r in main if r["judged"])
     return {
         "k": k, "recall_k": recall_k,
         "n_queries": len(main),
-        "n_judged": sum(1 for r in main if r["judged"]),
+        "n_judged": n_judged,
+        "basis": "heuristic" if not n_judged else "judged" if n_judged == len(main) else "mixed",
+        "judged": _judged_summary([r for r in main if r["judged"]], mean),
         "mode": main[0]["mode"] if main else None,
         "ndcg_at_10": mean(main, "ndcg_at_k"),
         "precision_at_10": mean(main, "precision_at_k"),
@@ -299,10 +302,19 @@ def _validate_search(cfg, df, embeddings, labels, clusters_meta, embedder, bm25,
                            "precision_at_10": mean(rows, "precision_at_k"),
                            "mrr": mean(rows, "mrr"), "recall_at_k": mean(rows, "recall_at_k")}
                     for name, rows in per_mode.items()},
-        "per_query": [{"query": r["query"], "area": r["area"], "ndcg_at_10": r["ndcg_at_k"],
-                       "precision_at_k": r["precision_at_k"], "mrr": r["mrr"],
-                       "recall_at_k": r["recall_at_k"]} for r in main],
+        "per_query": [{"query": r["query"], "area": r["area"], "judged": r["judged"],
+                       "ndcg_at_10": r["ndcg_at_k"], "precision_at_k": r["precision_at_k"],
+                       "mrr": r["mrr"], "recall_at_k": r["recall_at_k"]} for r in main],
     }
+
+
+def _judged_summary(rows: List[Dict], mean) -> Optional[Dict]:
+    """Metrics over hand-judged queries only: the honest baseline."""
+    if not rows:
+        return None
+    return {"n_queries": len(rows), "ndcg_at_10": mean(rows, "ndcg_at_k"),
+            "precision_at_10": mean(rows, "precision_at_k"), "mrr": mean(rows, "mrr"),
+            "recall_at_k": mean(rows, "recall_at_k")}
 
 
 # ---------------------------------------------------------------------------
@@ -353,6 +365,8 @@ def _append_history(cfg: Config, report: Dict) -> None:
     line = {"at": report["generated_at"], "papers": report["data"]["papers"],
             "span_months": report["data"]["span_months"], "ndcg_at_10": s["ndcg_at_10"],
             "precision_at_10": s["precision_at_10"], "mrr": s["mrr"], "recall_at_k": s["recall_at_k"],
+            "search_basis": s.get("basis"), "n_judged": s.get("n_judged"),
+            "judged_ndcg_at_10": (s.get("judged") or {}).get("ndcg_at_10"),
             "clusters": c["n_clusters"], "noise_fraction": c["noise_fraction"],
             "silhouette": c["silhouette_reduced"], "ari": (c.get("stability") or {}).get("mean_ari"),
             "reliable_growth": g["n_reliable"], "gates_passed": report["gates"]["passed"]}
@@ -385,8 +399,10 @@ def _write_markdown(cfg: Config, report: Dict) -> None:
         "| Gate | Value | Threshold | Required | Result |",
         "|---|---|---|---|---|",
     ]
-    lines += [f"| {r['gate']} | {_fmt(r['value'])} | {r['op']} {r['threshold']} | "
-              f"{'yes' if r['required'] else 'no'} | {'pass' if r['passed'] else 'FAIL'} |"
+    tag = "" if s.get("basis") == "judged" else f" ({s.get('basis', 'heuristic')} grades)"
+    lines += [f"| {r['gate']}{tag if r['gate'].startswith('search_') else ''} | {_fmt(r['value'])} | "
+              f"{r['op']} {r['threshold']} | {'yes' if r['required'] else 'no'} | "
+              f"{'pass' if r['passed'] else 'FAIL'} |"
               for r in gates["results"]]
     lines += [
         "",
@@ -405,6 +421,16 @@ def _write_markdown(cfg: Config, report: Dict) -> None:
         f"- Queries: **{s['n_queries']}** ({s['n_judged']} with hand judgments), mode: `{s['mode']}`",
         f"- nDCG@{s['k']}: **{_fmt(s['ndcg_at_10'])}** · precision@{s['k']}: **{_fmt(s['precision_at_10'])}** "
         f"· MRR: **{_fmt(s['mrr'])}** · recall@{s['recall_k']}: **{_fmt(s['recall_at_k'])}**",
+    ]
+    j = s.get("judged")
+    if j:
+        lines.append(f"- Hand-judged queries only ({j['n_queries']}): nDCG@{s['k']} **{_fmt(j['ndcg_at_10'])}** "
+                     f"· precision@{s['k']} **{_fmt(j['precision_at_10'])}** · MRR **{_fmt(j['mrr'])}**")
+    if s.get("basis") != "judged":
+        lines.append("- Unjudged queries use heuristic grades (expected category / keyword), so those "
+                     "numbers measure agreement with the query spec, not human relevance. Add judgments "
+                     "with `python -m scholargrid.judgments export --sample 15`.")
+    lines += [
         "",
         "| Mode | nDCG@10 | precision@10 | MRR | recall@25 |",
         "|---|---|---|---|---|",

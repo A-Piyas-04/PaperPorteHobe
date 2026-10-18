@@ -96,6 +96,47 @@ def test_search_submit_and_save_remove(app_config, tmp_path):
     assert not at.exception
 
 
+def test_citations_ready_thresholds():
+    from types import SimpleNamespace
+
+    import pandas as pd
+
+    ui, _ = _import_explore()
+    df = pd.DataFrame({"cited_by_count": [1] * 10 + [0] * 90,
+                       "citation_velocity": [0.5] + [0.0] * 99})
+    bundle = SimpleNamespace(meta={"counts": {"papers": 100, "with_citations": 9}}, df=df)
+    assert not ui.citations_ready(bundle) and not ui.velocity_ready(bundle)
+    bundle.meta["counts"]["with_citations"] = 10
+    assert ui.citations_ready(bundle) and ui.velocity_ready(bundle)
+    df.loc[0, "citation_velocity"] = 0.0
+    assert not ui.velocity_ready(bundle)
+
+
+def test_citation_controls_hidden_without_citation_data(app_config, tmp_path):
+    """The synthetic corpus has no citations, so citation sorts and filters must not be offered."""
+    at = AppTest.from_file(_script(tmp_path, "home"), default_timeout=120)
+    at.session_state["q"] = "language models"
+    at.run()
+    assert not at.exception, at.exception
+    assert at.selectbox(key="f_sort").options == ["Relevance", "Newest"]
+    assert not [t for t in at.toggle if t.key == "f_boost"]
+    assert not [n for n in at.number_input if n.key == "f_cites"]
+
+
+def test_live_paper_is_marked_unanalyzed(app_config, tmp_path):
+    path = tmp_path / "live_card.py"
+    path.write_text(textwrap.dedent(f"""
+        import sys
+        sys.path.insert(0, {APP_DIR!r}); sys.path.insert(0, {ROOT!r})
+        import ui
+        ui.paper_card("A live paper", "doi:10.1/x", authors="A. B", cites=0, new=True)
+    """), encoding="utf-8")
+    at = AppTest.from_file(str(path), default_timeout=120).run()
+    html_out = " ".join(m.value for m in at.markdown)
+    ui, _ = _import_explore()
+    assert ui.NEW_CHIP in html_out and "Not part of the areas" in html_out
+
+
 def test_empty_area_filter(app_config, tmp_path):
     at = AppTest.from_file(_script(tmp_path, "areas"), default_timeout=120).run()
     at.text_input[0].input("nonexistent-area-xyz").run()

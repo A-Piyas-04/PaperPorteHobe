@@ -37,6 +37,7 @@ def test_validation_report_and_release(built):
     cfg, _, report = built
     assert report["search"]["n_queries"] >= 100
     assert set(report["search"]["by_mode"]) == {"configured", "dense", "lexical"}
+    assert report["search"]["basis"] == "heuristic" and report["search"]["judged"] is None
     assert report["clusters"]["stability"]["mean_ari"] is not None
     assert {"passed", "results"} <= set(report["gates"])
     assert os.path.exists(os.path.join(cfg.reports_dir, "validation_report.md"))

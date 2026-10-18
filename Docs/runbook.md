@@ -8,7 +8,7 @@ short and current; anything here should be runnable as written.
 | Piece | Where | Notes |
 |---|---|---|
 | Pipeline | `python pipeline/run_pipeline.py` | Stages: ingest, enrich, embed, analyze, validate, publish |
-| Paper store | `data/raw/papers/` (Parquet) and `data/scholargrid.duckdb` | Upserts only; never hand-edit |
+| Paper store | `data/raw/arxiv/` (Parquet, system of record) and `data/scholargrid.duckdb` (working copy) | Upserts only; never hand-edit. **Offline only**: the app never reads either, so neither goes into a deployment |
 | Stage cache | `data/stages/` | Safe to delete; the next run rebuilds it |
 | Releases | `data/releases/<YYYY.MM.DD[.n]>/` plus `CURRENT` | What the app serves |
 | App | Docker image (`Dockerfile`) or `streamlit run app/streamlit_app.py` | Reads `CURRENT` (or `release.pin`) |
@@ -64,6 +64,22 @@ regardless of new publishes, set `release.pin: "<id>"` in the config. Old
 releases beyond `release.keep_last` are pruned automatically, and the CURRENT
 and pinned releases are never pruned.
 
+## Disk housekeeping (offline machine)
+
+What the app needs is only `data/releases/<id>/` plus `data/releases/CURRENT`
+(and `data/live/` for papers found by live search). Everything else under
+`data/` is offline working state:
+
+| Path | Size (typ.) | Safe to delete? |
+|---|---|---|
+| `data/scholargrid.duckdb` | hundreds of MB | Yes, with `python -m scholargrid.storage prune`. The Parquet raw layer keeps every paper and the DuckDB copy is rebuilt from it on the next harvest |
+| `data/stages/` | tens of MB + embedding cache | Yes; the next run rebuilds it. Keep `data/stages/embedding_cache/` if you can, otherwise every paper is re-embedded |
+| `data/raw/arxiv/` | hundreds of MB | No, unless you plan to re-harvest from scratch |
+| `data/raw/openalex_cache.parquet` | tens of MB | Yes, but the next enrich re-queries OpenAlex for every paper |
+
+Never copy `data/scholargrid.duckdb` (or anything outside `data/releases/`) into
+an app image or onto the server.
+
 ## When the weekly refresh fails
 
 The previous release stays live, so users are not affected right away. The app
@@ -88,13 +104,19 @@ shows a stale-data banner once the data is older than `monitoring.stale_after_da
 ## Updating relevance judgments
 
 ```bash
-python -m scholargrid.judgments export --out reports/judgments_todo.csv
-# grade each row 0/1/2 by hand
+python -m scholargrid.judgments export --sample 15 --out reports/judgments_todo.csv
+# fill the empty `grade` column by hand: 0 = not relevant, 1 = partly, 2 = relevant
 python -m scholargrid.judgments import reports/judgments_todo.csv
+python pipeline/run_pipeline.py --stage validate
 ```
 
 Hand-graded judgments in `configs/search_judgments.json` replace the heuristic
-grades for those queries.
+grades for those queries. Until some exist, every search number in
+`validation_report.md` is marked "heuristic grades": it measures whether results
+fall in the expected arXiv categories and contain expected keywords, not whether
+a person would find them relevant. Once 10 or more queries are judged, the report
+shows a separate "hand-judged queries only" line; record that as the baseline
+and set `validation.gates.search_ndcg_at_10` to a realistic value from it.
 
 ## Security notes
 

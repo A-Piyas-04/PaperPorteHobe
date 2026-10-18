@@ -161,7 +161,9 @@ python -c "import json; m=json.load(open('data/releases/' + open('data/releases/
 ```
 
 You should see tens of thousands of papers and the model
-`BAAI/bge-small-en-v1.5@latest`. Also open
+`BAAI/bge-small-en-v1.5@5c38ec7c405ec4b44b94cc5a9bb96e735b38267a` (the revision
+pinned in `configs/config.yaml`; the Dockerfile's `EMBED_MODEL` / `EMBED_REVISION`
+must match it). Also open
 `data\releases\<id>\validation_report.md` and skim it.
 
 If the run fails (for example the network dropped), run the same command again.
@@ -183,6 +185,10 @@ tar -czf scholargrid-release.tgz -C data releases/<id> releases/CURRENT
 
 Replace `<id>` with your id. This creates `scholargrid-release.tgz` (a few hundred
 megabytes) in the project folder.
+
+Pack only `releases/`. The rest of `data/` is offline working state the app never
+reads, in particular `data/scholargrid.duckdb` (hundreds of MB). See "Disk
+housekeeping" in `Docs/runbook.md` for what can be deleted on your PC.
 
 ### 3.5 Optional: test the production container on your PC
 
@@ -451,6 +457,8 @@ Get-ChildItem -Recurse -Directory -Filter __pycache__ $dst | Remove-Item -Recurs
 ```
 
 Do **not** copy `.dockerignore`: it would exclude the data folder from the image.
+Copy only `data\releases\<id>` and `CURRENT` as above: never `data\scholargrid.duckdb`,
+`data\stages` or `data\raw`, which would bloat the image without being used.
 
 ### B4. Make two edits in the copy
 
@@ -479,7 +487,9 @@ first build takes 10–15 minutes, then the app starts. Share the Space page
 
 - It sleeps after 48 hours without visitors; the next visitor waits about a minute.
 - Its disk resets on every restart, so papers found by live search are forgotten
-(search still works; they are just fetched again).
+(search still works; they are just fetched again). They were never part of the
+analyzed areas, map or trends (the app labels them "New · found online"), so the
+analyzed landscape is unaffected.
 - To update data or code, repeat B3–B5 with the new release.
 
 ---

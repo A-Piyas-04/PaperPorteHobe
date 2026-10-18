@@ -71,6 +71,26 @@ def test_parse_openalex_work_fixture():
     assert arxiv["venue"] == "" and arxiv["venue_type"] == "arxiv-only"
 
 
+def test_judgment_sample_spreads_across_areas():
+    from scholargrid.judgments import sample_queries
+
+    qs = [{"area": a, "query": f"{a}{i}"} for a, n in (("ml", 5), ("nlp", 2), ("se", 1)) for i in range(n)]
+    picked = [q["query"] for q in sample_queries(qs, 5)]
+    assert picked == ["ml0", "nlp0", "se0", "ml1", "nlp1"]
+    assert len(sample_queries(qs, None)) == len(qs)
+
+
+def test_graph_edges_record_shared_references(cfg):
+    from scholargrid.graph import build_graph
+
+    emb = np.array([[1, 0, 0], [.9, .1, 0], [0, 1, 0], [0, .9, .1]], dtype=np.float32)
+    df = pd.DataFrame({"references": ["W1 W2 W3", "W2 W3", "", "W9"]})
+    edges, _ = build_graph(df, emb, cfg)
+    by_pair = {(e[0], e[1]): e for e in edges}
+    assert by_pair[(0, 1)][3] == 2
+    assert all(len(e) == 3 for pair, e in by_pair.items() if pair != (0, 1))
+
+
 def test_merged_openalex_work_maps_back_to_arxiv_id(monkeypatch):
     from scholargrid import enrich as enrich_mod
 
