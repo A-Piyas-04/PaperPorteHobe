@@ -112,14 +112,17 @@ def _render_plan(doc) -> None:
                                                   for r in doc.references))
     with tab_exp:
         st.markdown("<div class='sg-section'>Export</div>", unsafe_allow_html=True)
+        from telemetry import track
+
         c1, c2, c3 = st.columns(3)
-        c1.download_button("Markdown", plan_to_markdown(doc), "research_plan.md", "text/markdown",
-                           use_container_width=True)
-        c2.download_button("JSON", plan_to_json(doc), "research_plan.json", "application/json",
-                           use_container_width=True)
-        c3.download_button("BibTeX", plan_to_bibtex(doc), "research_plan.bib", "application/x-bibtex",
-                           use_container_width=True)
-        st.text_area("Email draft to a possible supervisor", supervisor_email(doc), height=260, key="plan_email")
+        for col, label, data, fname, mime, fmt in (
+                (c1, "Markdown", plan_to_markdown(doc), "research_plan.md", "text/markdown", "md"),
+                (c2, "JSON", plan_to_json(doc), "research_plan.json", "application/json", "json"),
+                (c3, "BibTeX", plan_to_bibtex(doc), "research_plan.bib", "application/x-bibtex", "bib")):
+            col.download_button(label, data, fname, mime, use_container_width=True, key=f"plan_dl_{fmt}_{doc.id}",
+                                on_click=track, args=("plan_exported",), kwargs={"format": fmt})
+        st.text_area("Email draft to a possible supervisor", supervisor_email(doc), height=260,
+                     key=f"plan_email_{doc.id}")
 
 
 def render() -> None:
@@ -157,12 +160,19 @@ def render() -> None:
                 ws = ui.get_workspace(str(st.session_state["topic_query"]))
             except Exception:
                 ws = None
+        import time
+
+        from telemetry import track
+
+        t0 = time.time()
         with st.status("Writing your plan… (about a minute)", expanded=False) as status:
             bundle = ui.get_bundle()
             doc = generate_plan(gap, bundle, cfg, ui.get_llm(), bundle.embedder, weeks=inputs["weeks"],
                                 background=inputs["background"], compute_access=compute, goal=goal, workspace=ws,
                                 attempt=attempt)
             status.update(label="Done", state="complete")
+        track("plan_generated", mode=doc.generated_by.get("mode"), seconds=round(time.time() - t0, 1),
+              weeks=inputs["weeks"])
         plans.setdefault(gap["id"], {})[key] = doc.model_dump(mode="json")
         st.session_state["plan_last"] = key
     stored = (plans.get(gap["id"]) or {}).get(key) or (plans.get(gap["id"]) or {}).get(

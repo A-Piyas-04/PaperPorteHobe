@@ -24,10 +24,13 @@ def make_plan(card: dict) -> None:
     st.session_state["_goto"] = "plan"
 
 
-def not_useful(card: dict) -> None:
+def not_useful(card: dict, reason: str = "Other") -> None:
+    from telemetry import track
+
     fb = dict(st.session_state.get("gap_feedback", {}))
-    fb[card["id"]] = "not_useful"
+    fb[card["id"]] = reason
     st.session_state.gap_feedback = fb
+    track("gap_not_useful", gap_id=card["id"], type=card.get("type"), reason=reason)
 
 
 def _recheck(card: dict) -> None:
@@ -98,9 +101,12 @@ def render() -> None:
                    "and treat every card as a lead to verify.")
     recheck = st.session_state.pop("_recheck", None)
     if recheck is not None:
+        from telemetry import track
+
         with st.spinner("Checking recent papers…"):
-            recheck_novelty(recheck, ws, bundle, ui.get_searcher(ui.bundle_version()), cfg, ui.get_llm())
+            new = recheck_novelty(recheck, ws, bundle, ui.get_searcher(ui.bundle_version()), cfg, ui.get_llm())
         st.session_state.pop("_gaps_data", None)
+        track("novelty_checked", gap_id=recheck["id"], status=(new.get("novelty") or {}).get("status"))
 
     data = st.session_state.get("_gaps_data")
     if not data or data.get("ws_key") != ws.key:
@@ -120,6 +126,11 @@ def render() -> None:
             st.write("We look for problems several authors say are still open, untested combinations, narrow "
                      "evaluations, conflicting results and missing connections, then check recent papers.")
             if st.button("Find open problems for this topic (about 1–2 minutes)", type="primary", key="gaps_go"):
+                import time
+
+                from telemetry import track
+
+                t0 = time.time()
                 with st.status("Finding open problems…", expanded=True) as status:
                     bar = st.progress(0.0)
 
@@ -131,6 +142,8 @@ def render() -> None:
                                               progress=progress)
                     status.update(label="Done", state="complete", expanded=False)
                 st.session_state["_gaps_data"] = data
+                track("gaps_generated", n_cards=len(data.get("cards", [])), seconds=round(time.time() - t0, 1),
+                      requests_used=(data.get("stats") or {}).get("requests_used", 0))
                 st.rerun()
         return
 

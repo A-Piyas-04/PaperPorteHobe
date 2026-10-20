@@ -701,6 +701,9 @@ def toggle_paper(paper_id: str, record: dict | None = None, source: str = "searc
             row = paper_record(paper_id, record)
             if row:
                 repo.add_paper(pid, acc, row, source=source)
+                from telemetry import track
+
+                track("paper_saved", source=source)
     except ValueError as exc:
         st.session_state["_save_error"] = str(exc)
     _bump()
@@ -721,6 +724,9 @@ def toggle_gap(card: dict) -> None:
             repo.remove_gap(pid, acc, card["id"])
         else:
             repo.add_gap(pid, acc, card)
+            from telemetry import track
+
+            track("gap_saved", gap_id=card["id"], type=card.get("type"))
     except ValueError as exc:
         st.session_state["_save_error"] = str(exc)
     _bump()
@@ -767,7 +773,11 @@ def get_workspace(query: str):
         st.session_state["ws_key"] = key
         return cache[key]
     ws = load_cached(key, cfg)
+    cached = ws is not None
     if ws is None:
+        import time as _time
+
+        t0 = _time.time()
         with st.status("Mapping your topic…", expanded=True) as status:
             bar = st.progress(0.0)
 
@@ -778,6 +788,12 @@ def get_workspace(query: str):
             ws = build_workspace(query, get_bundle(), get_searcher(v), cfg, bundle_version=v, progress=progress,
                                  lookup=get_work_lookup(), llm=get_llm())
             status.update(label="Done", state="complete", expanded=False)
+        seconds = round(_time.time() - t0, 1)
+    else:
+        seconds = 0.0
+    from telemetry import track
+
+    track("workspace_built", n_papers=len(ws.papers), k=len(ws.top_level()), seconds=seconds, cached=cached)
     if len(cache) >= 8:
         cache.pop(next(iter(cache)))
     cache[key] = ws
@@ -804,6 +820,26 @@ def require_workspace():
         if st.button("Try again", key="ws_retry"):
             st.rerun()
         return None
+
+
+def signed_in_email() -> str:
+    user = getattr(st, "user", None)
+    try:
+        return str(user.email).lower() if user is not None and user.is_logged_in else ""
+    except Exception:
+        return ""
+
+
+def eval_allowed() -> bool:
+    """Evaluate/Admin pages: SCHOLARGRID_EVAL_MODE=1, or a signed-in email in SCHOLARGRID_ADMIN_EMAILS."""
+    cfg = get_config()
+    e = cfg["evaluation"]
+    if not e["enabled"]:
+        return False
+    if os.environ.get(e["eval_mode_env"]) == "1":
+        return True
+    admins = {a.strip().lower() for a in os.environ.get(e["admin_emails_env"], "").split(",") if a.strip()}
+    return bool(admins) and signed_in_email() in admins
 
 
 def topic_examples() -> list[str]:
@@ -977,7 +1013,7 @@ def fmt_date(d) -> str:
 # Navigation
 # ---------------------------------------------------------------------------
 JOURNEY = ["start", "topic", "reading", "gaps", "plan", "project"]
-MORE = ["home", "explore", "areas", "trends", "library", "leads", "about"]
+MORE = ["home", "explore", "areas", "trends", "library", "leads", "about", "evaluate", "admin"]
 _JOURNEY_STEPS = [("topic", "Topic", "j_topic"), ("reading", "Read first", "j_read"),
                   ("gaps", "Open problems", "j_gaps"), ("plan", "Plan", "j_plan"),
                   ("project", "Project", "j_project")]
@@ -1214,6 +1250,7 @@ def reading_path_list(path: list[dict], key: str = "rp") -> None:
             n += 1
 
 
+GAP_FEEDBACK_REASONS = ["Already done", "Too vague", "Not feasible", "Wrong or irrelevant", "Other"]
 _SCORE_PARTS = [("evidence", "Evidence"), ("novelty", "Novelty"), ("feasibility", "Feasibility"),
                 ("specificity", "Specificity"), ("recency", "Recency")]
 _LIVE_SOURCES = "arXiv, OpenAlex, Semantic Scholar"
@@ -1326,8 +1363,11 @@ def gap_card(card: dict, key_prefix: str, *, on_recheck=None, on_save=None, on_p
             cols[2].button("Check novelty now", key=f"{key_prefix}_nov_{cid}", on_click=on_recheck, args=(card,),
                            use_container_width=True)
         if on_feedback is not None:
-            cols[3].button("Not useful", key=f"{key_prefix}_bad_{cid}", on_click=on_feedback, args=(card,),
-                           use_container_width=True)
+            with cols[3].popover("Not useful", use_container_width=True):
+                st.caption("Why? (helps us improve; anonymous)")
+                for reason in GAP_FEEDBACK_REASONS:
+                    st.button(reason, key=f"{key_prefix}_bad_{cid}_{reason}", on_click=on_feedback,
+                              args=(card, reason), use_container_width=True)
 
 
 def abstract_snippet(text, n: int = 230) -> str | None:

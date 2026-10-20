@@ -50,6 +50,11 @@ def render() -> None:
     if ws is None:
         return
     path = list(ws.reading_path)
+    if st.session_state.get("_tracked_read") != ws.key:
+        from telemetry import track
+
+        st.session_state["_tracked_read"] = ws.key
+        track("reading_viewed", n_items=len(path))
     ui.page_header("Read first", f"What to read for: {ws.query}",
                    "An ordered path from overviews to the newest work, with a reason for each paper.")
     if not path:
@@ -62,10 +67,14 @@ def render() -> None:
         st.caption(f"Foundations are based on the references of {n_citing:,} of {n_coll:,} papers in this topic "
                    "(citation data from OpenAlex).")
     c1, c2, _ = st.columns([1, 1, 2])
+    from telemetry import track
+
     c1.download_button("Export Markdown", _markdown(ws, path), "reading_path.md", "text/markdown",
-                       use_container_width=True)
+                       use_container_width=True, on_click=track, args=("export_downloaded",),
+                       kwargs={"what": "reading_path", "format": "md"})
     c2.download_button("Export BibTeX", _bibtex(_bib_rows(path)), "reading_path.bib", "application/x-bibtex",
-                       use_container_width=True)
+                       use_container_width=True, on_click=track, args=("export_downloaded",),
+                       kwargs={"what": "reading_path", "format": "bib"})
     saved = ui.saved_paper_ids()
     n = 0
     for step, label in _STEPS:

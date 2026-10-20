@@ -132,8 +132,7 @@ def compare_extract(cfg: Config, routes: List[str], n: int, *, llm_for: Optional
                                           "statement": q["statement"], "section": q.get("section_kind", "")},
                               "context": {"route": route}, "overlap": False})
     rng = np.random.default_rng(seed)
-    order = rng.permutation(len(items)) if items else []
-    items = [items[int(i)] for i in order]
+    items = [items[int(i)] for i in rng.permutation(len(items))] if items else []
     name = round_name or f"compare-extract-{date.today().isoformat()}"
     save_round(cfg, new_round(name, "extraction", items, {"routes": routes, "reference": ref}))
     table = list(per_route.values())

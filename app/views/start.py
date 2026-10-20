@@ -22,6 +22,9 @@ def _choose(text: str) -> None:
     hist = [q for q in st.session_state.get("topic_history", []) if q != text]
     st.session_state.topic_history = [text, *hist][:5]
     st.session_state.pop("ws_selected", None)
+    from telemetry import query_props, track
+
+    track("topic_started", **query_props(ui.get_config(), text))
 
 
 def render() -> None:

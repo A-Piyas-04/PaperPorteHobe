@@ -49,7 +49,7 @@ def _build_pages() -> dict:
         trends,
     )
 
-    return {
+    pages = {
         "start": st.Page(start.render, title="Start", icon=":material/flag:", url_path="start", default=True),
         "topic": st.Page(topic.render, title="Topic", icon=":material/account_tree:", url_path="topic"),
         "reading": st.Page(reading.render, title="Read first", icon=":material/menu_book:",
@@ -66,6 +66,13 @@ def _build_pages() -> dict:
         "leads": st.Page(leads.render, title="Leads (legacy)", icon=":material/lightbulb:", url_path="leads"),
         "about": st.Page(about.render, title="About", icon=":material/info:", url_path="about"),
     }
+    if ui.eval_allowed():
+        from views import admin, evaluate
+
+        pages["evaluate"] = st.Page(evaluate.render, title="Evaluate", icon=":material/rate_review:",
+                                    url_path="evaluate")
+        pages["admin"] = st.Page(admin.render, title="Admin", icon=":material/monitoring:", url_path="admin")
+    return pages
 
 
 def _current_key(pages: dict, nav) -> str | None:
@@ -102,6 +109,11 @@ def main() -> None:
 
     pages = _build_pages()
     st.session_state["_pages"] = pages
+    if not st.session_state.get("_opened"):
+        from telemetry import track
+
+        st.session_state["_opened"] = True
+        track("app_open")
     # Keep the last query when Streamlit cleans up widgets on other pages.
     for key in ("q", "topic_input"):
         if key in st.session_state:

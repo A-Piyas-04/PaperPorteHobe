@@ -71,6 +71,7 @@ def validate(cfg: Config, df: pd.DataFrame, embeddings: np.ndarray, reduced: np.
         "enrichment": enrichment or {},
         "cluster_match": cluster_match or {},
         "extraction": extraction or {},
+        "human_evaluation": _human_evaluation(cfg),
     }
     report["gates"] = evaluate_gates(cfg, report)
     if write:
@@ -359,6 +360,21 @@ def _validate_projection(sparse_leads: list, cfg: Config) -> Dict:
     }
 
 
+def _human_evaluation(cfg: Config) -> Dict:
+    """Advisory: when gap quality was last measured by people (plan 09 rounds)."""
+    import time
+
+    from .evaluation.metrics import latest_history
+
+    last = latest_history(cfg, "gaps")
+    if not last:
+        return {"gap_round": None, "days_ago": None, "stale": True}
+    days = int((time.time() - float(last.get("at") or 0)) // 86400)
+    return {"gap_round": last.get("batch"), "gap_precision": last.get("gap_precision"),
+            "novelty_false_positive_rate": last.get("novelty_false_positive_rate"), "days_ago": days,
+            "stale": days > 60}
+
+
 # ---------------------------------------------------------------------------
 # Extraction (plan 03)
 # ---------------------------------------------------------------------------
@@ -504,6 +520,15 @@ def _write_markdown(cfg: Config, report: Dict) -> None:
             if top:
                 lines.append(f"- Top {facet}s: " + ", ".join(f"{k} ({v})" for k, v in top))
         lines.append("")
+    he = report.get("human_evaluation") or {}
+    if he:
+        lines += ["## Human evaluation (plan 09, advisory)",
+                  (f"- Gap quality last measured {he['days_ago']} days ago (round `{he['gap_round']}`): precision "
+                   f"**{_fmt(he.get('gap_precision'))}**, novelty false positives "
+                   f"**{_fmt(he.get('novelty_false_positive_rate'))}**"
+                   + (" — older than 60 days, run a new round." if he.get("stale") else ""))
+                  if he.get("gap_round") else "- Gap quality has not been measured by people yet "
+                  "(`python -m scholargrid.evaluation round gaps ...`).", ""]
     lines += [
         "> Reminder: sparsity is not proof of novelty; growth is not research quality; "
         "the 2D map is a visualisation, not evidence by itself.",

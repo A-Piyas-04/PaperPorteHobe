@@ -25,6 +25,7 @@ def current_user(cfg, repo) -> dict | None:
     key = f"_user_{email}"
     if key not in st.session_state:
         st.session_state[key] = repo.upsert_user(email=email, name=getattr(user, "name", "") or "")
+    st.session_state["user_id"] = st.session_state[key]["id"]
     return st.session_state[key]
 
 
@@ -33,8 +34,13 @@ def active_access(cfg, repo) -> Access:
     qp = st.query_params
     if "p" in qp and "k" in qp and (qp["p"] != st.session_state.get("proj_id")
                                     or qp["k"] != st.session_state.get("proj_token")):
+        returning = not st.session_state.get("proj_id")
         st.session_state["proj_id"], st.session_state["proj_token"] = qp["p"], qp["k"]
         st.session_state["_proj_rev"] = st.session_state.get("_proj_rev", 0) + 1
+        if returning:
+            from telemetry import track
+
+            track("project_returned")
     user = current_user(cfg, repo)
     return Access(user_id=user["id"] if user else None,
                   project_id=st.session_state.get("proj_id"), token=st.session_state.get("proj_token"))
@@ -76,6 +82,9 @@ def ensure_project(cfg, repo, *, title: str, topic: str, bundle_version: str = "
         st.query_params["p"], st.query_params["k"] = pid, token
         st.session_state["show_link_notice"] = True
     _migrate_session_items(repo, pid, Access(acc.user_id, pid, token))
+    from telemetry import track
+
+    track("project_created", mode="auth" if acc.user_id else "anonymous")
     return pid
 
 

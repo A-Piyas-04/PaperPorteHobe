@@ -269,6 +269,37 @@ def test_plan_page_generates(app_config, tmp_path):
     assert at.session_state["j_plan"]
 
 
+def test_evaluate_page_is_blind_and_saves(app_config, tmp_path, monkeypatch):
+    ui, _ = _import_explore()
+    from scholargrid.evaluation import make_gap_round, save_round
+
+    cfg = ui.get_config()
+    cards = [c for cs in ui.get_bundle().gaps["areas"].values() for c in cs]
+    save_round(cfg, make_gap_round("blindtest", cards, 3, 0.0, seed=1))
+    monkeypatch.setenv("SCHOLARGRID_EVAL_MODE", "1")
+    at = AppTest.from_file(_script(tmp_path, "evaluate"), default_timeout=120)
+    at.session_state["rater"] = "R-test"
+    at.run()
+    assert not at.exception, at.exception
+    at.selectbox(key="eval_round").set_value("blindtest").run()
+    text = " ".join(m.value for m in at.markdown if not m.value.lstrip().startswith("<style")).lower()
+    assert "why it might not be a gap" in text
+    for leak in ("confidence", "score", "novel"):
+        assert leak not in text, leak
+    for r in at.radio:
+        r.set_value(r.options[0])
+    at.button(key=next(b.key for b in at.button if "FormSubmitter" in str(b.key))).click().run()
+    assert not at.exception, at.exception
+    assert [r["rater"] for r in _repo().ratings(batch="blindtest")] == ["R-test"]
+
+
+def test_evaluate_hidden_without_eval_mode(app_config, monkeypatch):
+    monkeypatch.delenv("SCHOLARGRID_EVAL_MODE", raising=False)
+    at = AppTest.from_file(os.path.join(APP_DIR, "streamlit_app.py"), default_timeout=120).run()
+    assert not at.exception, at.exception
+    assert "evaluate" not in at.session_state["_pages"]
+
+
 def test_area_detail_shows_read_first(app_config, tmp_path):
     ui, _ = _import_explore()
     cid = int(next(iter(ui.get_bundle().clusters_meta)))
