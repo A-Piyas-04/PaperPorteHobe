@@ -1,8 +1,19 @@
-# ScholarGrid — weekly incremental refresh.
+# ScholarGrid — weekly incremental refresh and the daily extraction continuation.
 # Harvests new papers by date with OAI-PMH, merges them into the stored raw
 # layer, then rebuilds the bundle (embeddings are reused for unchanged papers).
+# The daily workflow runs `--from-stage fulltext` to continue full text + LLM
+# extraction on fresh free quota.
 
 extends: production.yaml
 
 data:
   source: oai_pmh
+
+fulltext:
+  max_papers_per_run: 400          # ~20 min at the polite 3-second arXiv rate
+
+llm:
+  budget:
+    # The pipeline and the app share one Google Cloud project's free quota. Set this to your
+    # project's real requests/day minus llm.budget.online_daily_requests, minus a margin.
+    offline_max_requests: 150

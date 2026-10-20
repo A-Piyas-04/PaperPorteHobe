@@ -63,6 +63,24 @@ def _fresh_llm():
     reset_llm()
 
 
+def fresh_db(cfg) -> None:
+    """Empty, migrated projects database. On SQLite every test has its own file; on the shared CI
+    Postgres (SCHOLARGRID_TEST_POSTGRES=1) the schema is dropped and rebuilt for isolation."""
+    from scholargrid.persistence.migrate import upgrade_to_head
+
+    if os.environ.get("SCHOLARGRID_TEST_POSTGRES") == "1":
+        from sqlalchemy import text
+
+        from scholargrid.persistence.db import get_engine
+        from scholargrid.persistence.models import Base
+
+        engine = get_engine(cfg)
+        Base.metadata.drop_all(engine)
+        with engine.begin() as conn:
+            conn.execute(text("DROP TABLE IF EXISTS alembic_version"))
+    upgrade_to_head(cfg)
+
+
 @pytest.fixture
 def cfg(tmp_path) -> Config:
     return make_config(tmp_path)

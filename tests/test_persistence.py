@@ -11,11 +11,12 @@ from scholargrid.persistence.repo import Access, AccessDenied, ProjectRepo
 
 @pytest.fixture
 def repo(tmp_path):
+    from conftest import fresh_db
+
     from scholargrid.persistence.db import dispose_all
-    from scholargrid.persistence.migrate import upgrade_to_head
 
     cfg = make_config(tmp_path)
-    upgrade_to_head(cfg)
+    fresh_db(cfg)
     r = ProjectRepo(cfg)
     yield r
     dispose_all()
@@ -127,10 +128,12 @@ def test_migrations_idempotent(tmp_path):
     from scholargrid.persistence.db import dispose_all, get_engine
     from scholargrid.persistence.migrate import upgrade_to_head
 
+    from conftest import fresh_db
+
     cfg = make_config(tmp_path)
-    upgrade_to_head(cfg)
+    fresh_db(cfg)
     upgrade_to_head(cfg)
     tables = set(inspect(get_engine(cfg)).get_table_names())
     assert {"users", "projects", "project_papers", "project_gaps", "project_plans", "project_notes",
-            "alembic_version"} <= tables
+            "ratings", "events", "llm_usage_daily", "alembic_version"} <= tables
     dispose_all()

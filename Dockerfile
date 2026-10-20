@@ -1,9 +1,7 @@
-# ScholarGrid app image. The pipeline runs elsewhere (your PC / CI / a worker) and
-# the data folder with the published release is mounted at /app/data
-# (see Docs/deployment.md).
-#
-#   docker build -t scholargrid .
-#   docker run -p 8501:8501 -v $PWD/data:/app/data -e SCHOLARGRID_ENV=production scholargrid
+# ScholarGrid app image. Hugging Face Spaces builds it from this file on its own servers
+# (no local Docker needed). The pipeline runs in GitHub Actions and publishes the release
+# into data/releases/ (see Docs/deployment.md). Projects live in an external Postgres
+# (SCHOLARGRID_DB_URL); scripts/start.sh applies migrations before starting the app.
 
 FROM python:3.12-slim AS builder
 ENV PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
@@ -44,9 +42,11 @@ COPY --chown=scholargrid:scholargrid app ./app
 COPY --chown=scholargrid:scholargrid configs ./configs
 COPY --chown=scholargrid:scholargrid .streamlit ./.streamlit
 COPY --chown=scholargrid:scholargrid app.py ./
+COPY --chown=scholargrid:scholargrid alembic.ini ./
+COPY --chown=scholargrid:scholargrid scripts/start.sh ./scripts/start.sh
 RUN mkdir -p data && chown scholargrid:scholargrid data
 USER scholargrid
 EXPOSE 8501
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
     CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8501/_stcore/health', timeout=4).status == 200 else 1)"
-CMD ["streamlit", "run", "app/streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+CMD ["bash", "scripts/start.sh"]

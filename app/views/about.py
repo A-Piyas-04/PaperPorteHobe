@@ -126,7 +126,13 @@ def render() -> None:
 - Abstracts and metadata from every source link back to the original record.
 - **Quotes are short excerpts with links to the source; each paper keeps its own licence.**
   Full texts are read for analysis only and never redistributed.
+- **AI disclosure:** summaries, Gap Card wording and plans are generated with Google Gemini (free tier) and
+  grounded in the cited papers. Free-tier content may be used by Google to improve its products; don't enter
+  personal information. **Generated text can be wrong. Verify every claim against the cited papers.**
 """)
+        contact = ui.get_config()["app"]["contact_email"]
+        if contact:
+            st.markdown(f"Corrections, takedown requests and questions: [{html.escape(contact)}](mailto:{html.escape(contact)})")
 
 
 def _how_gaps(bundle) -> None:

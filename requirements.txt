@@ -36,9 +36,11 @@ lxml==6.1.2
 pypdf==6.21.0
 rapidfuzz==3.14.5
 
-# Persistence (plan 08)
+# Persistence (plan 08); Postgres driver and Streamlit login for production (plan 11)
 sqlalchemy==2.1.4
 alembic==1.19.2
+psycopg[binary]==3.3.5
+Authlib==1.9.0
 
 # Optional: error tracking (enabled only when SENTRY_DSN is set)
 # sentry-sdk>=2.0

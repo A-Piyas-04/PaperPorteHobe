@@ -43,6 +43,29 @@ jobs:
           name: coverage
           path: coverage.xml
 
+  postgres:
+    # Projects database on real Postgres (the laptop only uses SQLite).
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: pw
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      SCHOLARGRID_DB_URL: postgresql://postgres:pw@localhost:5432/postgres
+      SCHOLARGRID_TEST_POSTGRES: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[app,dev,llm,fulltext,db,db-postgres]"
+      - run: pytest tests/test_persistence.py tests/test_online_guard.py
+
   regression:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest

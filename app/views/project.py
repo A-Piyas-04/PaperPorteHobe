@@ -232,6 +232,10 @@ def _settings_tab(repo, pid: str, acc: Access, info: dict, user: dict | None) ->
             st.session_state["proj_token"] = token
             st.query_params["p"], st.query_params["k"] = pid, token
             st.rerun()
+    cfg = ui.get_config()
+    if cfg["llm"]["allow_byok"] and cfg["llm"]["provider"] == "live":
+        st.markdown("<div class='sg-section'>Your AI key</div>", unsafe_allow_html=True)
+        ui.byok_settings("byok_project")
     st.markdown("<div class='sg-section'>Export and import</div>", unsafe_allow_html=True)
     st.download_button("Export project (JSON)", json.dumps(repo.export_project(pid, acc), indent=2, ensure_ascii=False),
                        "scholargrid_project.json", "application/json", key="proj_export")
