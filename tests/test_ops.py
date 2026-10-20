@@ -71,9 +71,9 @@ def test_rate_limit_window_and_heavy_slot(monkeypatch):
     st.session_state.pop("_rl_test", None)
     st.session_state.pop("_byok_llm", None)
     assert limits.allow("test") and limits.allow("test") and not limits.allow("test")
-    with limits.heavy_slot(timeout=0.1, slots=1), pytest.raises(limits.Busy):
-        with limits.heavy_slot(timeout=0.1, slots=1):
-            pass
+    with limits.heavy_slot(timeout=0.1, slots=1), pytest.raises(limits.Busy), \
+            limits.heavy_slot(timeout=0.1, slots=1):
+        pass
 
 
 def test_only_llm_package_imports_provider_sdks():

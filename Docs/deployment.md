@@ -592,8 +592,8 @@ one named in `CURRENT`).
   ```
   limiting requests" is expected until you have its API key.
   ```
-- [ ] Save to reading list → Reading list page → Download BibTeX works.
-- [ ] More like this, Explore results, Areas, Trends, Leads and About all open.
+- [ ] Save to project → My project → BibTeX export works, and the bookmarked link reopens the project.
+- [ ] Start → Topic → Read first → Open problems → Plan all open; Search, Map, Areas, Trends and About open from More.
 - [ ] The About page shows the dataset with your expected paper count, and **no**
   ```
   "Grow collection" button (it is hidden on public sites).
