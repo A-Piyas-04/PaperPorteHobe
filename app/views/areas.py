@@ -127,3 +127,16 @@ def _detail(bundle, cid: int) -> None:
                 cats = df.loc[bundle.labels == cid, "primary_category"].value_counts().head(5).to_dict()
             rows = [{"Category": k, "Papers": int(v)} for k, v in cats.items()]
             ui.html_table(rows, ["Category", "Papers"], numeric=("Papers",), bar_col="Papers")
+
+    path = (getattr(bundle, "reading_paths", None) or {}).get(str(cid)) or []
+    with ui.panel("area-read-first"):
+        ui.panel_header("Read first", f"{len(path)} papers in order")
+        if not path:
+            ui.note("No reading path yet for this area (needs citation data).")
+        else:
+            f = (bundle.meta.get("foundations") or {})
+            if f.get("reference_coverage") is not None and not f.get("synthetic_references"):
+                st.caption(f"Foundations are based on the reference lists of "
+                           f"{f.get('papers_with_references', 0):,} papers "
+                           f"({f['reference_coverage']:.0%} of the collection).")
+            ui.reading_path_list(path, key=f"area-{cid}")

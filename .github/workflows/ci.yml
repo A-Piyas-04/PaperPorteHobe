@@ -34,7 +34,7 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Install (core + app, no torch)
-        run: pip install -e ".[app,dev]" duckdb faiss-cpu
+        run: pip install -e ".[app,dev,llm,fulltext,db]" duckdb faiss-cpu
       - name: Unit, integration and app smoke tests
         run: pytest --cov --cov-report=term --cov-report=xml
       - uses: actions/upload-artifact@v4
@@ -52,7 +52,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install -e ".[app,dev]" duckdb faiss-cpu
+      - run: pip install -e ".[app,dev,llm,fulltext,db]" duckdb faiss-cpu
       - name: Full synthetic pipeline with gates
         run: python pipeline/run_pipeline.py --config configs/ci.yaml --no-publish
       - uses: actions/upload-artifact@v4

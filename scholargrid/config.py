@@ -53,6 +53,12 @@ def capabilities() -> Dict[str, bool]:
         "hdbscan": _have("hdbscan"),
         "faiss": _have("faiss"),
         "duckdb": _have("duckdb"),
+        "google_genai": _have("google.genai"),
+        "openai_client": _have("openai"),
+        "bs4": _have("bs4"),
+        "pypdf": _have("pypdf"),
+        "rapidfuzz": _have("rapidfuzz"),
+        "sqlalchemy": _have("sqlalchemy"),
     }
 
 
@@ -99,6 +105,24 @@ class Config:
     @property
     def live_dir(self) -> str:
         return self._path("live_dir")
+
+    @property
+    def fulltext_dir(self) -> str:
+        return self.abspath(self.raw["fulltext"]["store_dir"])
+
+    @property
+    def extract_dir(self) -> str:
+        return self.abspath(self.raw["extract"]["store_dir"])
+
+    @property
+    def workspace_dir(self) -> str:
+        return self.abspath(self.raw["workspace"]["cache_dir"])
+
+    @property
+    def db_url(self) -> str:
+        from .persistence.db import resolve_url
+
+        return resolve_url(self)
 
     # -- derived settings ---------------------------------------------------
     @property

@@ -34,12 +34,33 @@ def make_config(tmp_path, **overrides) -> Config:
     raw["growth"]["bootstrap_samples"] = 200
     raw["growth"]["min_papers_per_period"] = 10
     raw["storage"]["path"] = str(tmp_path / "store.duckdb")
+    raw["llm"]["provider"] = "fake"
+    raw["llm"]["cache_dir"] = str(tmp_path / "llm_cache")
+    raw["llm"]["usage_dir"] = str(tmp_path / "llm_usage")
+    raw["scope"]["max_papers"] = None
+    raw["fulltext"]["source"] = "synthetic"
+    raw["fulltext"]["store_dir"] = str(tmp_path / "fulltext")
+    raw["extract"]["store_dir"] = str(tmp_path / "extract")
+    raw["workspace"]["cache_dir"] = str(tmp_path / "workspaces")
+    raw["workspace"]["live"] = False
+    raw["persistence"]["default_url"] = "sqlite:///" + str(tmp_path / "app.db").replace("\\", "/")
+    raw["telemetry"]["enabled"] = False
+    raw["evaluation"]["report_dir"] = str(tmp_path / "eval")
     for section, values in overrides.items():
         if isinstance(values, dict):
             raw[section].update(values)
         else:
             raw[section] = values
     return cfg
+
+
+@pytest.fixture(autouse=True)
+def _fresh_llm():
+    from scholargrid.llm import reset_llm
+
+    reset_llm()
+    yield
+    reset_llm()
 
 
 @pytest.fixture

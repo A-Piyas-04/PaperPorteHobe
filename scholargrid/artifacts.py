@@ -36,6 +36,15 @@ EDGES_JSON = "edges.json"
 NEIGHBORS_JSON = "neighbors.json"
 META_JSON = "meta.json"
 EMBEDDER_DIR = "embedder"
+FACETS_PARQUET = "paper_facets.parquet"
+PROBLEMS_PARQUET = "problems.parquet"
+FINDINGS_PARQUET = "findings.parquet"
+PROFILE_PARQUET = "paper_profile.parquet"
+FACET_VOCAB_JSON = "facet_vocab.json"
+PROBLEM_EMB_NPY = "problem_embeddings.npy"
+FOUNDATIONS_PARQUET = "foundations.parquet"
+READING_PATHS_JSON = "reading_paths.json"
+GAPS_JSON = "gaps.json"
 _CSV_MAX_ROWS = 20000
 _MMAP_MIN_BYTES = 512 * 1024 * 1024
 _PROBE_PAPERS = 3
@@ -117,10 +126,27 @@ class Bundle:
     embedder_error: Optional[str] = None
     phrase: Optional[PhraseIndex] = None
     acronyms: Dict = field(default_factory=dict)
+    facets: pd.DataFrame = field(default_factory=pd.DataFrame)
+    problems: pd.DataFrame = field(default_factory=pd.DataFrame)
+    findings: pd.DataFrame = field(default_factory=pd.DataFrame)
+    profiles: pd.DataFrame = field(default_factory=pd.DataFrame)
+    facet_vocab: Dict = field(default_factory=dict)
+    problem_embeddings: Optional[np.ndarray] = None
+    foundations: pd.DataFrame = field(default_factory=pd.DataFrame)
+    reading_paths: Dict = field(default_factory=dict)
+    gaps: Dict = field(default_factory=dict)
 
 
 def _load_optional(path: str, default):
     return load_json(path) if os.path.exists(path) else default
+
+
+def _parquet_optional(path: str) -> pd.DataFrame:
+    return pd.read_parquet(path) if os.path.exists(path) else pd.DataFrame()
+
+
+def _npy_optional(path: str) -> Optional[np.ndarray]:
+    return np.load(path) if os.path.exists(path) else None
 
 
 def load_papers(out: str) -> pd.DataFrame:
@@ -204,8 +230,21 @@ def load_bundle(cfg: Config, directory: Optional[str] = None) -> Bundle:
     index = NeighborIndex.load(out, embeddings, cfg)
     phrase = PhraseIndex.load(out, len(df)) or PhraseIndex.from_frame(df)
     acronyms = acronym_io.load(out) or acronym_io.mine(df["abstract"].astype(str))
+    problems = _parquet_optional(os.path.join(out, PROBLEMS_PARQUET))
+    problem_emb = _npy_optional(os.path.join(out, PROBLEM_EMB_NPY))
+    if problem_emb is not None and len(problem_emb) != len(problems):
+        problem_emb = None
     return Bundle(df, embeddings, labels, clusters_meta, growth, sparse_leads, meta,
-                  embedder, edges, neighbors, bm25, index, out, err, phrase, acronyms)
+                  embedder, edges, neighbors, bm25, index, out, err, phrase, acronyms,
+                  facets=_parquet_optional(os.path.join(out, FACETS_PARQUET)),
+                  problems=problems,
+                  findings=_parquet_optional(os.path.join(out, FINDINGS_PARQUET)),
+                  profiles=_parquet_optional(os.path.join(out, PROFILE_PARQUET)),
+                  facet_vocab=_load_optional(os.path.join(out, FACET_VOCAB_JSON), {}),
+                  problem_embeddings=problem_emb,
+                  foundations=_parquet_optional(os.path.join(out, FOUNDATIONS_PARQUET)),
+                  reading_paths=_load_optional(os.path.join(out, READING_PATHS_JSON), {}),
+                  gaps=_load_optional(os.path.join(out, GAPS_JSON), {}))
 
 
 def bundle_exists(cfg: Config) -> bool:

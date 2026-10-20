@@ -21,6 +21,12 @@ data/releases/
 data/live/
 data/grow_status.json
 data/grow.log
+data/llm_cache/
+data/llm_usage/
+data/fulltext/
+data/extract/
+data/workspaces/
+data/app.db
 *.duckdb
 *.duckdb.wal
 

@@ -1,0 +1,17 @@
+# Full cs.CL production profile. Runs in GitHub Actions only (daily; extraction resumes
+# across days until the scope is done, most-cited papers first).
+extends: production.yaml
+
+data:
+  categories: [cs.CL]
+  date_start: "2019-01-01"
+  profile: full
+
+scope:
+  name: nlp
+  categories: [cs.CL]
+  max_papers: 6000
+  priority: most_cited
+
+llm:
+  provider: live

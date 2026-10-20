@@ -9,6 +9,16 @@ panels on a soft grey page so sections are clearly separated, flat bordered
 cards with a small hover lift, fade/slide entrances, a thin top progress bar
 while the app is working. No dark/glass surfaces, gradient heroes, glows,
 spotlights or ring effects.
+
+Session keys shared across the research journey:
+
+| Key           | Set by       | Meaning                                              |
+|---------------|--------------|------------------------------------------------------|
+| topic_query   | start/topic  | the active topic text                                |
+| ws_key        | topic        | cache key of the active workspace                    |
+| ws_selected   | topic        | selected sub-topic id                                |
+| j_*           | each page    | journey completion flags (j_topic, j_read, j_gaps, j_plan, j_project) |
+| topic_history | start        | recent topics this session                           |
 """
 from __future__ import annotations
 
@@ -49,6 +59,12 @@ EXAMPLES = [
     "federated learning privacy",
     "reinforcement learning for robotics",
     "efficient transformer inference",
+]
+
+TOPIC_EXAMPLES = [
+    "hallucination in retrieval-augmented generation",
+    "graph neural networks for drug discovery",
+    "privacy attacks on federated learning",
 ]
 
 
@@ -395,8 +411,31 @@ _CSS = """
   .sg-title { max-width: 850px; font-size: clamp(2rem, 4vw, 3.5rem); line-height: 1.15; }
   .sg-card:hover { transform: none; box-shadow: none; }
   .st-key-panel-hero { padding-top: 2.5rem; }
+  .sg-journey.five { grid-template-columns: repeat(5, 1fr); gap: 18px; }
+  .sg-journey-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; margin: 0 0 1rem;
+                    font-size: .875rem; color: var(--muted); }
+  .sg-journey-bar i { font-style: normal; color: #b6bcc7; }
+  .sg-jstep { padding: .15rem .55rem; border-radius: 999px; border: 1px solid transparent; }
+  .sg-jstep.done { color: #1a7f55; }
+  .sg-jstep.now { color: var(--ink); font-weight: 700; border-color: #c4d5ee; background: #f3f6fd; }
+  .sg-subtopic-n { font-size: .8125rem; color: var(--muted); margin: .25rem 0 .35rem; }
+  .sg-concepts { display: grid; grid-template-columns: minmax(8rem, 1fr) 3fr; gap: .35rem 1rem; margin: .6rem 0; }
+  .sg-concepts dt { font-weight: 700; }
+  .sg-concepts dd { margin: 0; color: #333b49; }
+  .sg-gap-statement { font-size: 1.0625rem; line-height: 1.55; margin: .3rem 0 .5rem; color: var(--ink); }
+  .sg-caveat { background: #fff8e8; border: 1px solid #f0dfb5; border-radius: 12px; padding: .6rem .8rem;
+               margin: .4rem 0; font-size: .9375rem; }
+  .sg-caveat ul { margin: .3rem 0 0 1.1rem; padding: 0; }
+  .sg-score-bars { display: flex; flex-wrap: wrap; gap: .4rem .8rem; align-items: center; font-size: .8125rem;
+                   color: var(--muted); margin: .3rem 0 .4rem; }
+  .sg-score-part { position: relative; isolation: isolate; padding: .1rem .45rem; border: 1px solid var(--border);
+                   border-radius: 6px; overflow: hidden; }
+  .sg-score-part i { position: absolute; left: 0; top: 0; bottom: 0; background: #e3ecfd; z-index: -1; }
+  .sg-evidence { padding: .45rem 0; border-bottom: 1px solid var(--border); font-size: .9375rem; }
+  .sg-evidence blockquote { margin: .35rem 0; padding-left: .7rem; border-left: 3px solid #c4d5ee; color: #333b49; }
   @media (max-width: 700px) {
-    .sg-journey { grid-template-columns: 1fr; gap: 12px; }
+    .sg-journey, .sg-journey.five { grid-template-columns: 1fr; gap: 12px; }
+    .sg-concepts { grid-template-columns: 1fr; }
     .sg-brand-sub { display: none; }
     .st-key-tour-dock, .st-key-tour-invite { padding: 1.15rem 1.2rem 1rem; }
     .sg-tour-title { font-size: 1.15rem; }
@@ -506,6 +545,273 @@ def run_search(version: str, query: str, top_k: int, filters: tuple = (), sort: 
 
 def max_query_chars() -> int:
     return int(get_config()["search"]["max_query_chars"])
+
+
+@st.cache_resource(show_spinner=False)
+def _llm_client(config_hash: str):
+    from scholargrid.llm import get_llm as _get
+
+    return _get(get_config())
+
+
+def get_llm():
+    """The LLM client every page passes into library calls (never call scholargrid.llm.get_llm in views)."""
+    return _llm_client(get_config().config_hash())
+
+
+@st.cache_resource(show_spinner=False)
+def get_work_lookup():
+    """One OpenAlex work lookup (with its cache) shared by every session."""
+    from scholargrid.foundations import WorkLookup
+
+    cfg = get_config()
+    return WorkLookup(cfg, synthetic=get_bundle().meta.get("snapshot", {}).get("source") == "synthetic")
+
+
+# ---------------------------------------------------------------------------
+# Durable projects (plan 08); session-only fallback when persistence is off
+# ---------------------------------------------------------------------------
+@st.cache_resource(show_spinner=False)
+def _repo(config_hash: str):
+    from scholargrid.persistence import get_repo as _get
+
+    return _get(get_config())
+
+
+def get_repo():
+    """The project repository (migrated once per process), or ``None`` when persistence is disabled."""
+    if not get_config()["persistence"]["enabled"]:
+        return None
+    try:
+        return _repo(get_config().config_hash())
+    except Exception as exc:
+        from scholargrid.monitoring import capture_exception
+
+        capture_exception(exc)
+        st.session_state["_repo_error"] = f"{type(exc).__name__}"
+        return None
+
+
+def _bump() -> None:
+    st.session_state["_proj_rev"] = st.session_state.get("_proj_rev", 0) + 1
+
+
+def project_access():
+    from project_access import active_access
+
+    repo = get_repo()
+    return None if repo is None else active_access(get_config(), repo)
+
+
+@st.cache_data(show_spinner=False, ttl=600, max_entries=256)
+def _project_items(pid: str, token: str, user_id: str, rev: int) -> dict:
+    from scholargrid.persistence.repo import Access, AccessDenied
+
+    repo = get_repo()
+    acc = Access(user_id=user_id or None, project_id=pid, token=token or None)
+    try:
+        return {"papers": repo.papers(pid, acc), "gaps": repo.gaps(pid, acc), "ok": True}
+    except AccessDenied:
+        return {"papers": [], "gaps": [], "ok": False}
+
+
+def project_items() -> dict:
+    """Saved papers and gaps of the active project (cached per project revision)."""
+    acc = project_access()
+    if acc is None or not acc.project_id:
+        return {"papers": [], "gaps": [], "ok": acc is not None}
+    return _project_items(acc.project_id, acc.token or "", acc.user_id or "", int(st.session_state.get("_proj_rev", 0)))
+
+
+def saved_paper_ids() -> set:
+    if get_repo() is None:
+        return set((st.session_state.get("saved_papers") or {}).keys())
+    return {p["paper_id"] for p in project_items()["papers"]}
+
+
+def saved_gap_ids() -> set:
+    if get_repo() is None:
+        return set((st.session_state.get("saved_gaps") or {}).keys())
+    return {g["gap_id"] for g in project_items()["gaps"]}
+
+
+def saved_gaps() -> list[dict]:
+    if get_repo() is None:
+        return list((st.session_state.get("saved_gaps") or {}).values())
+    return [g["payload"] for g in project_items()["gaps"]]
+
+
+def paper_save_label(saved: bool) -> str:
+    where = "project" if get_repo() is not None else "reading list"
+    return f"Remove from {where}" if saved else f"Save to {where}"
+
+
+_RECORD_FIELDS = ["paper_id", "arxiv_id", "doi", "url", "title", "authors", "venue", "date",
+                  "primary_category", "cited_by_count", "abstract", "sources"]
+
+
+def paper_record(paper_id: str, record: dict | None = None) -> dict | None:
+    """A saveable dict for a collection or live paper."""
+    if record:
+        row = dict(record)
+    else:
+        df = get_bundle().df
+        rows = df.loc[df.arxiv_id.astype(str) == paper_id]
+        if not rows.empty:
+            row = rows.iloc[0].to_dict()
+            row.update(url=paper_url(paper_id), sources=["arxiv"])
+        else:
+            row = get_searcher(bundle_version()).paper(paper_id) or {}
+    if not row:
+        return None
+    row = {k: row.get(k, "") for k in _RECORD_FIELDS}
+    row["paper_id"] = paper_id
+    row["date"] = str(row["date"] or "")[:10]
+    return row
+
+
+def _project_id_for_write():
+    from project_access import active_access, ensure_project
+
+    cfg, repo = get_config(), get_repo()
+    acc = active_access(cfg, repo)
+    pid = acc.project_id or ensure_project(cfg, repo, title=str(st.session_state.get("topic_query") or ""),
+                                           topic=str(st.session_state.get("topic_query") or ""),
+                                           bundle_version=bundle_version())
+    return repo, pid, active_access(cfg, repo)
+
+
+def toggle_paper(paper_id: str, record: dict | None = None, source: str = "search") -> None:
+    """Add or remove a paper (collection or found online) from the project / reading list."""
+    if get_repo() is None:
+        saved = dict(st.session_state.get("saved_papers", {}))
+        if paper_id in saved:
+            del saved[paper_id]
+        else:
+            row = paper_record(paper_id, record)
+            if row:
+                saved[paper_id] = row
+        st.session_state.saved_papers = saved
+        return
+    try:
+        repo, pid, acc = _project_id_for_write()
+        if paper_id in saved_paper_ids():
+            repo.remove_paper(pid, acc, paper_id)
+        else:
+            row = paper_record(paper_id, record)
+            if row:
+                repo.add_paper(pid, acc, row, source=source)
+    except ValueError as exc:
+        st.session_state["_save_error"] = str(exc)
+    _bump()
+
+
+def toggle_gap(card: dict) -> None:
+    if get_repo() is None:
+        saved = dict(st.session_state.get("saved_gaps", {}))
+        if card["id"] in saved:
+            del saved[card["id"]]
+        else:
+            saved[card["id"]] = card
+        st.session_state.saved_gaps = saved
+        return
+    try:
+        repo, pid, acc = _project_id_for_write()
+        if card["id"] in saved_gap_ids():
+            repo.remove_gap(pid, acc, card["id"])
+        else:
+            repo.add_gap(pid, acc, card)
+    except ValueError as exc:
+        st.session_state["_save_error"] = str(exc)
+    _bump()
+
+
+def save_plan(doc: dict) -> bool:
+    if get_repo() is None:
+        saved = dict(st.session_state.get("saved_plans", {}))
+        saved[doc["id"]] = doc
+        st.session_state.saved_plans = saved
+        return False
+    repo, pid, acc = _project_id_for_write()
+    repo.add_plan(pid, acc, doc)
+    _bump()
+    return True
+
+
+def project_notices() -> None:
+    """The 'bookmark this link' notice after an anonymous project is created, and save errors."""
+    from project_access import project_link
+
+    err = st.session_state.pop("_save_error", None)
+    if err:
+        note(f"<b>Couldn't save.</b> {html.escape(err)}")
+    if st.session_state.get("show_link_notice") and st.session_state.get("proj_id"):
+        with st.container(key="link-notice"):
+            note("<b>Your project is saved. Bookmark this page.</b> Anyone with this link can view and edit the "
+                 "project.")
+            st.code(project_link(), language=None)
+            if st.button("Got it", key="link_notice_ok"):
+                st.session_state["show_link_notice"] = False
+                st.rerun()
+
+
+def get_workspace(query: str):
+    """The topic workspace for ``query``: session cache, then disk cache, else build it with progress."""
+    from scholargrid.workspace import build_workspace, load_cached, workspace_key
+
+    cfg = get_config()
+    v = bundle_version()
+    key = workspace_key(query, v, cfg)
+    cache = st.session_state.setdefault("_ws", {})
+    if key in cache:
+        st.session_state["ws_key"] = key
+        return cache[key]
+    ws = load_cached(key, cfg)
+    if ws is None:
+        with st.status("Mapping your topic…", expanded=True) as status:
+            bar = st.progress(0.0)
+
+            def progress(msg: str, frac: float) -> None:
+                status.update(label=msg)
+                bar.progress(min(1.0, max(0.0, float(frac))))
+
+            ws = build_workspace(query, get_bundle(), get_searcher(v), cfg, bundle_version=v, progress=progress,
+                                 lookup=get_work_lookup(), llm=get_llm())
+            status.update(label="Done", state="complete", expanded=False)
+    if len(cache) >= 8:
+        cache.pop(next(iter(cache)))
+    cache[key] = ws
+    st.session_state["ws_key"] = key
+    return ws
+
+
+def require_workspace():
+    """The active workspace, or ``None`` after showing a 'choose a topic first' note."""
+    q = str(st.session_state.get("topic_query", "") or "").strip()
+    if not q:
+        note("<b>No topic yet.</b> Start by describing what you want to research.")
+        if st.button("Choose a topic", type="primary", key="need_topic"):
+            goto("start")
+        return None
+    try:
+        return get_workspace(q)
+    except Exception as exc:
+        from scholargrid.monitoring import capture_exception
+
+        capture_exception(exc)
+        note("<b>We couldn't map this topic right now.</b> The error has been logged. Try again in a moment, "
+             "or try a different phrasing.")
+        if st.button("Try again", key="ws_retry"):
+            st.rerun()
+        return None
+
+
+def topic_examples() -> list[str]:
+    cats = get_config()["scope"]["categories"]
+    if cats != "all" and any(str(c).startswith("cs.CL") for c in cats):
+        return ["hallucination in retrieval-augmented generation", "low-resource machine translation",
+                "evaluating large language model reasoning"]
+    return TOPIC_EXAMPLES
 
 
 # ---------------------------------------------------------------------------
@@ -670,23 +976,70 @@ def fmt_date(d) -> str:
 # ---------------------------------------------------------------------------
 # Navigation
 # ---------------------------------------------------------------------------
+JOURNEY = ["start", "topic", "reading", "gaps", "plan", "project"]
+MORE = ["home", "explore", "areas", "trends", "library", "leads", "about"]
+_JOURNEY_STEPS = [("topic", "Topic", "j_topic"), ("reading", "Read first", "j_read"),
+                  ("gaps", "Open problems", "j_gaps"), ("plan", "Plan", "j_plan"),
+                  ("project", "Project", "j_project")]
+
+
 def render_top_nav(pages: dict) -> None:
     from views import tour
 
     with st.container(key="topnav"):
-        st.markdown("<div class='sg-brand'>ScholarGrid <span class='sg-brand-sub'>Research, with direction.</span></div>",
-                    unsafe_allow_html=True)
-        cols = st.columns([1.2, 1.2, 1.2, .8, .8], gap="small")
-        for col, key in zip(cols[:3], ["home", "explore", "library"]):
-            if key in pages:
-                col.page_link(pages[key])
-        with cols[3], st.popover("More", use_container_width=True):
-            for key in ["areas", "trends", "leads", "about"]:
-                if key in pages:
+        st.markdown("<div class='sg-brand'>ScholarGrid <span class='sg-brand-sub'>From a topic to a "
+                    "research question.</span></div>", unsafe_allow_html=True)
+        steps = [k for k in JOURNEY if k in pages]
+        cols = st.columns([1] * len(steps) + [0.8, 0.8], gap="small")
+        for col, key in zip(cols, steps):
+            col.page_link(pages[key])
+        durable = get_repo() is not None
+        with cols[len(steps)], st.popover("More", use_container_width=True):
+            for key in MORE:
+                if key in pages and not (key == "library" and durable):
                     st.page_link(pages[key])
-            st.caption("Start with Find papers. Use these tools when you want deeper context.")
-        with cols[4]:
+            st.caption("Follow the steps from Start. These tools give deeper context.")
+            _account_controls()
+        with cols[len(steps) + 1]:
             tour.header_control()
+
+
+def _account_controls() -> None:
+    """Sign in / out (only with persistence.auth: oidc and Streamlit auth configured)."""
+    cfg = get_config()
+    if cfg["persistence"]["auth"] != "oidc" or get_repo() is None:
+        return
+    user = getattr(st, "user", None)
+    try:
+        logged_in = bool(user is not None and user.is_logged_in)
+    except Exception:
+        return
+    if logged_in:
+        st.caption(f"Signed in as {html.escape(str(getattr(user, 'name', '') or getattr(user, 'email', '')))}")
+        if st.button("Sign out", key="auth_logout"):
+            st.logout()
+    elif st.button("Sign in", key="auth_login"):
+        provider = cfg["persistence"]["oidc_provider"]
+        if provider:
+            st.login(provider)
+        else:
+            st.login()
+
+
+def journey_bar(current: str) -> None:
+    """Thin breadcrumb: 1 Topic · 2 Read first · 3 Open problems · 4 Plan · 5 Project."""
+    pages = st.session_state.get("_pages") or {}
+    parts = []
+    for n, (key, label, flag) in enumerate(_JOURNEY_STEPS, start=1):
+        if pages and key not in pages:
+            continue
+        done = bool(st.session_state.get(flag))
+        cls = "now" if key == current else ("done" if done else "")
+        mark = "✓ " if done and key != current else f"{n} "
+        aria = " aria-current='step'" if key == current else ""
+        parts.append(f"<span class='sg-jstep {cls}'{aria}>{mark}{html.escape(label)}</span>")
+    st.markdown("<nav class='sg-journey-bar' aria-label='Research journey'>" + "<i>·</i>".join(parts)
+                + "</nav>", unsafe_allow_html=True)
 
 
 def goto(key: str) -> None:
@@ -790,13 +1143,16 @@ _SOURCE_NAMES = {"arxiv": "arXiv", "openalex": "OpenAlex", "semantic_scholar": "
 NEW_CHIP = "New · found online"
 _NEW_TIP = ("Found by a live lookup, not in the analyzed collection. Not part of the areas, "
             "map or trends until the next data build.")
+OUTSIDE_CHIP = "Outside the collection · via OpenAlex"
+_OUTSIDE_TIP = ("Cited by many papers here but not itself in the collection (often older than its "
+                "start date), so the map and areas don't show it.")
 
 
 def paper_card(title: str, paper_id: str, *, url: str | None = None, authors: str | None = None,
                cites: int | None = None, category: str | None = None, venue: str | None = None,
                date=None, area: str | None = None, score: float | None = None,
                snippet: str | None = None, delay: int = 0, terms: Sequence[str] = (),
-               sources: Sequence[str] = (), new: bool = False) -> None:
+               sources: Sequence[str] = (), new: bool = False, outside: bool = False) -> None:
     if authors is None or cites is None:
         index = _paper_index(get_bundle().meta.get("generated_at", "v1"))
         a, c = index.get(str(paper_id), ("", 0))
@@ -805,6 +1161,8 @@ def paper_card(title: str, paper_id: str, *, url: str | None = None, authors: st
     chips = ""
     if new:
         chips += f"<span class='sg-chip new' title='{html.escape(_NEW_TIP)}'>{NEW_CHIP}</span>"
+    if outside:
+        chips += f"<span class='sg-chip src' title='{html.escape(_OUTSIDE_TIP)}'>{OUTSIDE_CHIP}</span>"
     if cites:
         chips += f"<span class='sg-chip cites'>{cites:,} citation{'s' if cites != 1 else ''}</span>"
     if category:
@@ -832,6 +1190,144 @@ def paper_card(title: str, paper_id: str, *, url: str | None = None, authors: st
     if snippet:
         body += f"<div class='s'>{_highlight(snippet, terms)}</div>"
     st.markdown(body + "</div>", unsafe_allow_html=True)
+
+
+READING_STEPS = {"survey": "Start with an overview", "foundation": "Foundations",
+                 "recent": "Key recent work", "frontier": "The frontier"}
+
+
+def reading_path_list(path: list[dict], key: str = "rp") -> None:
+    """Render a reading path (surveys -> foundations -> key recent -> frontier) as grouped paper cards."""
+    n = 0
+    for step, label in READING_STEPS.items():
+        items = [p for p in path if p.get("step") == step]
+        if not items:
+            continue
+        st.markdown(f"<div class='sg-section'>{html.escape(label)}</div>", unsafe_allow_html=True)
+        for p in items:
+            snippet = p.get("why_read") or p.get("reason") or ""
+            if p.get("what_you_learn"):
+                snippet += f" You'll learn: {p['what_you_learn']}"
+            paper_card(p.get("title", ""), str(p.get("paper_id", "")), url=p.get("url") or None, authors="",
+                       cites=int(p.get("cited_by_count") or 0), date=str(p.get("year") or ""),
+                       snippet=snippet, delay=n, outside=not p.get("in_corpus", True))
+            n += 1
+
+
+_SCORE_PARTS = [("evidence", "Evidence"), ("novelty", "Novelty"), ("feasibility", "Feasibility"),
+                ("specificity", "Specificity"), ("recency", "Recency")]
+_LIVE_SOURCES = "arXiv, OpenAlex, Semantic Scholar"
+
+
+def _ago(ts) -> str:
+    import time as _t
+
+    if not ts:
+        return "not yet"
+    days = int((_t.time() - float(ts)) // 86400)
+    return "today" if days <= 0 else ("yesterday" if days == 1 else f"{days} days ago")
+
+
+def novelty_line(nov: dict) -> tuple[str, bool]:
+    """(html, offer a live re-check)."""
+    status = nov.get("status", "not_checked")
+    scope = nov.get("scope", "none")
+    when = _ago(nov.get("checked_at"))
+    where = f"collection + {_LIVE_SOURCES}" if scope == "collection+live" else "the collection only"
+    related = [h for h in nov.get("hits", []) if h.get("verdict") in ("addresses", "partially")]
+    links = ", ".join(f"<a href='{html.escape(h.get('url') or '')}' target='_blank' rel='noopener'>"
+                      f"{html.escape(h.get('title', '')[:70])}</a>" for h in related[:3])
+    if status == "not_checked":
+        return "Novelty not checked yet.", True
+    if status == "novel":
+        text = f"No paper found that already does this (checked {when}: {where})."
+    elif status == "partially_explored":
+        text = f"{len(related)} related paper{'s' if len(related) != 1 else ''} found ({links}); checked {when}: {where}."
+    else:
+        text = f"Already explored by: {links} (checked {when}: {where})."
+    if nov.get("method") == "heuristic":
+        text += " Judged by similarity only (no AI check)."
+    return text, scope != "collection+live"
+
+
+def gap_card(card: dict, key_prefix: str, *, on_recheck=None, on_save=None, on_plan=None,
+             on_feedback=None, saved: bool = False, label: str | None = None) -> None:
+    """Render one Gap Card: type, statement, caveats, novelty, score parts, evidence and first steps."""
+    from scholargrid.gaps.model import ROLE_LABELS, TYPE_HELP, TYPE_LABELS
+
+    cid = str(card.get("id"))
+    typ = str(card.get("type", ""))
+    chips = (f"<span class='sg-chip area' title='{html.escape(TYPE_HELP.get(typ, ''))}'>"
+             f"{html.escape(TYPE_LABELS.get(typ, typ))}</span>"
+             f"<span class='sg-chip'>Confidence: {html.escape(str(card.get('confidence', 'low')))}</span>"
+             f"<span class='sg-chip'>Feasibility: {html.escape(str(card.get('feasibility', 'medium')))}</span>")
+    if card.get("beginner_friendly"):
+        chips += "<span class='sg-chip cites'>Beginner-friendly</span>"
+    if label:
+        chips += f"<span class='sg-chip src'>{html.escape(label)}</span>"
+    if not (card.get("generated_by") or {}).get("synthesized", True):
+        chips += "<span class='sg-chip'>Template wording</span>"
+    with st.container(key=f"gap-{key_prefix}-{cid}"):
+        st.markdown(f"<div class='sg-area-t'>{html.escape(str(card.get('title', '')))}</div>"
+                    f"<div class='m' style='margin:.35rem 0'>{chips}</div>"
+                    f"<p class='sg-gap-statement'>{html.escape(str(card.get('statement', '')))}</p>",
+                    unsafe_allow_html=True)
+        if card.get("why_it_matters"):
+            st.markdown(f"**Why it matters.** {card['why_it_matters']}")
+        reasons = [r for r in card.get("why_it_might_not_be_a_gap", []) if r]
+        if reasons:
+            more = "".join(f"<li>{html.escape(r)}</li>" for r in reasons[1:])
+            st.markdown("<div class='sg-caveat'><b>Why this might not be a gap:</b> "
+                        f"{html.escape(reasons[0])}{'<ul>' + more + '</ul>' if more else ''}</div>",
+                        unsafe_allow_html=True)
+        nov_text, offer = novelty_line(card.get("novelty") or {})
+        st.markdown(f"<div class='sg-subtopic-n'>{nov_text}</div>", unsafe_allow_html=True)
+        scores = card.get("scores") or {}
+        explain = scores.get("explain") or {}
+        bars = "".join(
+            f"<span class='sg-score-part' title='{html.escape(name)}: {html.escape(str(explain.get(k, '')))}'>"
+            f"<i style='width:{int(100 * float(scores.get(k, 0) or 0))}%'></i>{html.escape(name)}</span>"
+            for k, name in _SCORE_PARTS)
+        st.markdown(f"<div class='sg-score-bars' aria-label='Score {float(scores.get('total', 0) or 0):.2f}'>"
+                    f"<b>Score {float(scores.get('total', 0) or 0):.2f}</b>{bars}</div>", unsafe_allow_html=True)
+        ev = card.get("evidence") or []
+        with st.expander(f"Evidence ({len({e.get('paper_id') for e in ev})} papers)"):
+            for e in ev:
+                year = f" ({e['year']})" if e.get("year") else ""
+                role = ROLE_LABELS.get(str(e.get("role")), str(e.get("role")))
+                body = (f"<b>{html.escape(str(e.get('eid', '')))}</b> · <a href='{html.escape(str(e.get('url', '')))}' "
+                        f"target='_blank' rel='noopener'>{html.escape(str(e.get('title', '')))}</a>{year} · "
+                        f"<i>{html.escape(role)}</i>")
+                if e.get("quote"):
+                    sect = f" — {html.escape(str(e.get('section')))}" if e.get("section") else ""
+                    body += f"<blockquote>“{html.escape(str(e['quote']))}”{sect}</blockquote>"
+                    if e.get("anchor_url"):
+                        body += (f"<a href='{html.escape(str(e['anchor_url']))}' target='_blank' rel='noopener'>"
+                                 "Read in context</a>")
+                elif e.get("note"):
+                    body += f"<div class='sg-subtopic-n'>{html.escape(str(e['note']))}</div>"
+                st.markdown(f"<div class='sg-evidence'>{body}</div>", unsafe_allow_html=True)
+        with st.expander("How to start"):
+            for step in card.get("first_steps") or []:
+                st.markdown(f"- {step}")
+            if card.get("skills"):
+                st.markdown("**Skills:** " + ", ".join(card["skills"]))
+            if card.get("data_needs"):
+                st.markdown(f"**Data:** {card['data_needs']}")
+            st.markdown(f"**Compute:** {card.get('compute', 'unknown')}")
+        cols = st.columns(4)
+        if on_save is not None:
+            cols[0].button("Remove from project" if saved else "Save to project", key=f"{key_prefix}_save_{cid}",
+                           on_click=on_save, args=(card,), use_container_width=True)
+        if on_plan is not None:
+            cols[1].button("Make a starter plan", key=f"{key_prefix}_plan_{cid}", on_click=on_plan, args=(card,),
+                           use_container_width=True)
+        if on_recheck is not None and offer:
+            cols[2].button("Check novelty now", key=f"{key_prefix}_nov_{cid}", on_click=on_recheck, args=(card,),
+                           use_container_width=True)
+        if on_feedback is not None:
+            cols[3].button("Not useful", key=f"{key_prefix}_bad_{cid}", on_click=on_feedback, args=(card,),
+                           use_container_width=True)
 
 
 def abstract_snippet(text, n: int = 230) -> str | None:

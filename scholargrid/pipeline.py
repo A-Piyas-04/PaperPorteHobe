@@ -1,6 +1,6 @@
 """Staged offline pipeline.
 
-    ingest -> enrich -> embed -> analyze -> validate -> publish
+    ingest -> enrich -> fulltext -> extract -> embed -> analyze -> foundations -> gaps -> validate -> publish
 
 ``analyze`` covers index -> reduce -> cluster -> match IDs -> stability ->
 label -> project -> growth -> sparse -> graph -> BM25 and writes the bundle.
@@ -31,10 +31,15 @@ from .utils import configure_logging, ensure_dir, get_logger, load_json, save_js
 
 log = get_logger("pipeline")
 
-STAGES = ["ingest", "enrich", "embed", "analyze", "validate", "publish"]
+STAGES = ["ingest", "enrich", "fulltext", "extract", "embed", "analyze", "foundations", "gaps", "validate",
+          "publish"]
 ProgressFn = Optional[Callable[[float, str], None]]
 _PROGRESS = {"ingest": (0.05, "Ingesting arXiv corpus…"), "enrich": (0.15, "Looking up citations…"),
+             "fulltext": (0.18, "Reading full texts (Limitations, Future Work)…"),
+             "extract": (0.22, "Extracting methods, datasets and open problems…"),
              "embed": (0.25, "Embedding papers…"), "analyze": (0.45, "Clustering and mapping…"),
+             "foundations": (0.8, "Finding foundational papers and reading paths…"),
+             "gaps": (0.86, "Detecting open problems…"),
              "validate": (0.9, "Validating…"), "publish": (0.97, "Publishing release…")}
 
 
@@ -110,6 +115,25 @@ def stage_enrich(ctx: Context) -> None:
         ctx.save_json("enrichment", stats)
         ctx.save_frame("enriched", df)
         info.update(papers=len(df), matched=stats["matched"])
+
+
+def stage_fulltext(ctx: Context) -> None:
+    from .fulltext import run_fulltext
+
+    with stage_timer("fulltext", ctx.timings) as info:
+        stats = run_fulltext(ctx.frame("enriched"), ctx.cfg, progress=ctx.data.get("fulltext_progress"))
+        ctx.save_json("fulltext_stats", stats)
+        info.update(in_scope=stats["in_scope"], ok=stats["ok"], fetched_now=stats["fetched_now"])
+
+
+def stage_extract(ctx: Context) -> None:
+    from .extract import run_extract
+
+    with stage_timer("extract", ctx.timings) as info:
+        stats = run_extract(ctx.frame("enriched"), ctx.cfg)
+        ctx.save_json("extract_stats", stats)
+        info.update(**{k: stats[k] for k in ("in_scope", "done_now", "llm", "heuristic", "pending_llm",
+                                              "requests_used")})
 
 
 def stage_embed(ctx: Context) -> None:
@@ -248,6 +272,8 @@ def stage_analyze(ctx: Context) -> None:
         },
         "quality": ctx.json("quality", {}),
         "enrichment": ctx.json("enrichment", {}),
+        "fulltext": ctx.json("fulltext_stats", {}),
+        "extract": ctx.json("extract_stats", {}),
         "cluster_match": match["report"],
         "cluster_stability": {k: v for k, v in stability.items() if k != "per_cluster_survival"},
         "ann_recall_at_25": recall,
@@ -259,10 +285,47 @@ def stage_analyze(ctx: Context) -> None:
         save_bundle(cfg, df, embeddings, reduced, coords2d, labels, clusters_meta, growth,
                     sparse_leads, embedder, meta, edges=edges, neighbors=neighbors,
                     bm25=bm25, index=index, phrase=phrase, acronyms=acronyms)
+    with stage_timer("extraction_bundle", t) as info:
+        from .extract.bundle import write_extraction_bundle
+
+        info.update(**write_extraction_bundle(cfg, df, embedder, cfg.processed_dir))
+    meta["extraction_bundle"] = {k: v for k, v in t["extraction_bundle"].items() if k != "seconds"}
+    meta["stage_timings"] = dict(t)
+    save_json(meta, os.path.join(cfg.processed_dir, "meta.json"))
     ctx.data.update(df=df, embeddings=embeddings, reduced=reduced, labels=labels,
                     clusters_meta=clusters_meta, growth=growth, sparse_leads=sparse_leads,
                     embedder=embedder, index=index, bm25=bm25, meta=meta, stability=stability,
                     ann_recall=recall, phrase=phrase, acronyms=acronyms)
+
+
+def _update_meta(ctx: Context, key: str, value: Any) -> None:
+    """Add a post-analyze stage's stats to the staged meta.json (and the in-memory copy)."""
+    meta_path = os.path.join(ctx.cfg.processed_dir, "meta.json")
+    meta = load_json(meta_path)
+    meta[key] = value
+    save_json(meta, meta_path)
+    if "meta" in ctx.data:
+        ctx.data["meta"][key] = value
+
+
+def stage_foundations(ctx: Context) -> None:
+    from .foundations import build_foundations
+
+    cfg = ctx.cfg
+    with stage_timer("foundations", ctx.timings) as info:
+        stats = build_foundations(cfg, cfg.processed_dir)
+        info.update(**{k: v for k, v in stats.items() if isinstance(v, (int, float)) and not isinstance(v, bool)})
+    _update_meta(ctx, "foundations", stats)
+
+
+def stage_gaps(ctx: Context) -> None:
+    from .gaps.engine import run_offline_gaps
+
+    cfg = ctx.cfg
+    with stage_timer("gaps", ctx.timings) as info:
+        stats = run_offline_gaps(cfg, cfg.processed_dir)
+        info.update(**{k: v for k, v in stats.items() if isinstance(v, (int, float)) and not isinstance(v, bool)})
+    _update_meta(ctx, "gaps", stats)
 
 
 def _snapshot(df: pd.DataFrame, cfg: Config) -> Dict:
@@ -286,6 +349,9 @@ def stage_validate(ctx: Context) -> None:
                  reduced=np.load(os.path.join(cfg.processed_dir, "reduced.npy")),
                  stability=b.meta.get("cluster_stability", {}),
                  ann_recall=b.meta.get("ann_recall_at_25"), phrase=b.phrase, acronyms=b.acronyms)
+    from .validation import extraction_summary
+
+    extraction = extraction_summary(cfg.processed_dir, d["meta"].get("extract"))
     with stage_timer("validate", ctx.timings) as info:
         report = validate(cfg, d["df"], d["embeddings"], d["reduced"], d["labels"], d["clusters_meta"],
                           d["embedder"], d["sparse_leads"], bm25=d["bm25"], index=d["index"],
@@ -293,7 +359,7 @@ def stage_validate(ctx: Context) -> None:
                           quality=d["meta"].get("quality"), growth=d["growth"],
                           stability=d["stability"], ann_recall=d["ann_recall"],
                           enrichment=d["meta"].get("enrichment"),
-                          cluster_match=d["meta"].get("cluster_match"))
+                          cluster_match=d["meta"].get("cluster_match"), extraction=extraction)
         d["report"] = report
         info.update(gates_passed=report["gates"]["passed"], ndcg=report["search"]["ndcg_at_10"])
 
@@ -313,18 +379,24 @@ def stage_publish(ctx: Context) -> None:
         info.update(release=rid)
 
 
-_FUNCS = {"ingest": stage_ingest, "enrich": stage_enrich, "embed": stage_embed,
-          "analyze": stage_analyze, "validate": stage_validate, "publish": stage_publish}
+_FUNCS = {"ingest": stage_ingest, "enrich": stage_enrich, "fulltext": stage_fulltext, "extract": stage_extract,
+          "embed": stage_embed, "analyze": stage_analyze, "foundations": stage_foundations, "gaps": stage_gaps,
+          "validate": stage_validate, "publish": stage_publish}
 
 
 def run(cfg: Config, progress: ProgressFn = None, stages: Optional[List[str]] = None,
-        force_publish: bool = False) -> Tuple[Dict, Dict]:
-    """Run ``stages`` (default: all). Returns ``(meta, validation_report)``."""
+        force_publish: bool = False,
+        stage_progress: Optional[Dict[str, Callable[[int, int], None]]] = None) -> Tuple[Dict, Dict]:
+    """Run ``stages`` (default: all). Returns ``(meta, validation_report)``.
+
+    ``stage_progress`` maps a stage name to a ``(done, total)`` callback for long, resumable stages."""
     configure_logging(cfg["monitoring"]["json_logs"])
     set_seed(cfg["seed"])
     stages = stages or STAGES
     ctx = Context(cfg)
     ctx.data["force_publish"] = force_publish
+    for name, fn in (stage_progress or {}).items():
+        ctx.data[f"{name}_progress"] = fn
     t0 = time.time()
     log.info("ScholarGrid v%s | env=%s | stages=%s | backends available: %s",
              __version__, cfg["environment"], stages, capabilities())
@@ -378,6 +450,7 @@ def main(argv: Optional[List[str]] = None) -> None:
     if args.no_publish and "publish" in stages:
         stages.remove("publish")
     progress = None
+    stage_progress: Dict[str, Callable[[int, int], None]] = {}
     if args.status_file:
         from . import data_ingest
         from .grow import write_status
@@ -395,8 +468,16 @@ def main(argv: Optional[List[str]] = None) -> None:
                                  f"({n:,} records so far)")
 
         data_ingest.set_harvest_progress(harvest_progress)
+
+        def fulltext_progress(done: int, total: int) -> None:
+            lo, hi = _PROGRESS["fulltext"][0], _PROGRESS["embed"][0]
+            write_status(status_file, progress=round(lo + (hi - lo) * done / max(1, total), 3),
+                         message=f"Reading full texts: {done} of {total} papers")
+
+        stage_progress["fulltext"] = fulltext_progress
     try:
-        meta, report = run(cfg, progress=progress, stages=stages, force_publish=args.force_publish)
+        meta, report = run(cfg, progress=progress, stages=stages, force_publish=args.force_publish,
+                           stage_progress=stage_progress)
     except Exception as exc:
         capture_exception(exc)
         if args.status_file:

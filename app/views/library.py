@@ -1,40 +1,21 @@
-﻿"""Session reading list with portable exports."""
+﻿"""Reading list: an alias of My project when projects are durable; the session list otherwise."""
 import pandas as pd
 import streamlit as st
 
 import ui
-from views.home import _bibtex
-
-_FIELDS = ["paper_id", "arxiv_id", "doi", "url", "title", "authors", "venue", "date",
-           "primary_category", "cited_by_count", "abstract", "sources"]
-
-
-def _record(paper_id: str) -> dict | None:
-    df = ui.get_bundle().df
-    rows = df.loc[df.arxiv_id.astype(str) == paper_id]
-    if not rows.empty:
-        row = rows.iloc[0].to_dict()
-        row.update(paper_id=paper_id, url=ui.paper_url(paper_id), sources=["arxiv"])
-        return row
-    return ui.get_searcher(ui.bundle_version()).paper(paper_id)
+from scholargrid.bibtex import to_bibtex as _bibtex
 
 
 def toggle(paper_id: str, record: dict | None = None) -> None:
-    """Add or remove a paper (collection or found online) from the reading list."""
-    saved = dict(st.session_state.get("saved_papers", {}))
-    if paper_id in saved:
-        del saved[paper_id]
-    else:
-        row = record or _record(paper_id)
-        if row:
-            row = {k: row.get(k, "") for k in _FIELDS}
-            row["paper_id"] = paper_id
-            row["date"] = str(row["date"] or "")[:10]
-            saved[paper_id] = row
-    st.session_state.saved_papers = saved
+    """Add or remove a paper (collection or found online). Kept for existing callers."""
+    ui.toggle_paper(paper_id, record)
 
 
 def render() -> None:
+    if ui.get_repo() is not None:
+        ui.goto("project")
+        ui.note("The reading list is now part of <b>My project</b>.")
+        return
     ui.page_header("Your next steps", "Reading list", "Keep the papers you want to read or discuss. Export your list to take it with you.")
     st.caption("Saved for this session only. Download your list before closing or reloading the app.")
     saved = st.session_state.get("saved_papers", {})

@@ -33,23 +33,38 @@ st.set_page_config(page_title="ScholarGrid", page_icon="🔭", layout="wide")
 
 def _build_pages() -> dict:
     """Create the st.Page objects, keyed by a short name for programmatic nav."""
-    from views import about, areas, explore, home, leads, library, trends
+    from views import (
+        about,
+        areas,
+        explore,
+        gaps,
+        home,
+        leads,
+        library,
+        plan,
+        project,
+        reading,
+        start,
+        topic,
+        trends,
+    )
 
     return {
-        "home": st.Page(home.render, title="Find papers", icon=":material/search:",
-                        url_path="home", default=True),
-        "explore": st.Page(explore.render, title="Workspace", icon=":material/hub:",
-                           url_path="explore"),
-        "areas": st.Page(areas.render, title="Areas", icon=":material/category:",
-                         url_path="areas"),
-        "trends": st.Page(trends.render, title="Trends", icon=":material/trending_up:",
-                          url_path="trends"),
-        "leads": st.Page(leads.render, title="Leads (experimental)", icon=":material/lightbulb:",
-                         url_path="leads"),
+        "start": st.Page(start.render, title="Start", icon=":material/flag:", url_path="start", default=True),
+        "topic": st.Page(topic.render, title="Topic", icon=":material/account_tree:", url_path="topic"),
+        "reading": st.Page(reading.render, title="Read first", icon=":material/menu_book:",
+                           url_path="read-first"),
+        "gaps": st.Page(gaps.render, title="Open problems", icon=":material/explore:", url_path="open-problems"),
+        "plan": st.Page(plan.render, title="Plan", icon=":material/route:", url_path="plan"),
+        "project": st.Page(project.render, title="My project", icon=":material/folder_open:", url_path="project"),
         "library": st.Page(library.render, title="Reading list", icon=":material/bookmarks:",
                            url_path="reading-list"),
-        "about": st.Page(about.render, title="About", icon=":material/info:",
-                         url_path="about"),
+        "home": st.Page(home.render, title="Search papers", icon=":material/search:", url_path="search"),
+        "explore": st.Page(explore.render, title="Map", icon=":material/hub:", url_path="explore"),
+        "areas": st.Page(areas.render, title="All areas", icon=":material/category:", url_path="areas"),
+        "trends": st.Page(trends.render, title="Trends", icon=":material/trending_up:", url_path="trends"),
+        "leads": st.Page(leads.render, title="Leads (legacy)", icon=":material/lightbulb:", url_path="leads"),
+        "about": st.Page(about.render, title="About", icon=":material/info:", url_path="about"),
     }
 
 
@@ -88,8 +103,9 @@ def main() -> None:
     pages = _build_pages()
     st.session_state["_pages"] = pages
     # Keep the last query when Streamlit cleans up widgets on other pages.
-    if "q" in st.session_state:
-        st.session_state["q"] = st.session_state["q"]
+    for key in ("q", "topic_input"):
+        if key in st.session_state:
+            st.session_state[key] = st.session_state[key]
 
     nav = st.navigation(list(pages.values()), position="hidden")
     # Which page is showing, as a short key — the guided tour binds steps to these.
@@ -99,6 +115,8 @@ def main() -> None:
 
     ui.render_top_nav(pages)
     ui.global_notices(ui.get_bundle())
+    if st.session_state.get("_page_key") != "project":
+        ui.project_notices()
     tour.render_dock()
     try:
         nav.run()

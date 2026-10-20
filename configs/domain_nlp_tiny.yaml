@@ -1,0 +1,24 @@
+# Laptop-safe real-data smoke checks: ~200 cs.CL abstracts, ~20 papers get full text + LLM.
+# No `ml` extra needed (TF-IDF / PCA / k-means backends).
+extends: domain_nlp_dev.yaml
+
+data:
+  max_papers: 200
+
+embedding:
+  backend: tfidf            # no PyTorch on the laptop
+
+reduce:
+  backend: pca
+
+landscape:
+  backend: pca
+
+cluster:
+  backend: kmeans
+
+sparse:
+  min_corpus_size: 100
+
+scope:
+  max_papers: 20            # ~5 packed LLM requests, ~1 minute of polite arXiv fetching

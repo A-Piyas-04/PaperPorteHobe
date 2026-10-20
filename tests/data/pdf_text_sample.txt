@@ -1,0 +1,22 @@
+Robust Parsing of Noisy Text
+A. Author, B. Author
+University of Somewhere
+Abstract
+We study robust parsing of noisy text and show improvements on three bench-
+marks with a simple augmentation strategy.
+1 Introduction
+Parsing noisy text is hard. Prior work focuses on clean newswire.
+2 Method
+We train a parser with augmented data.
+3 Experiments
+We evaluate on three datasets and report labelled attachment score.
+4 Limitations
+Our method does not handle code-switched input. The approach is limited to
+English data.
+5 Conclusion
+We presented a robust parser. Future work will address multilingual input.
+References
+[1] J. Smith. Parsing noisy text. In Proceedings of ACL, 2020.
+[2] K. Lee. Robustness. In Proceedings of EMNLP, 2021.
+A Appendix
+Additional results are shown here.

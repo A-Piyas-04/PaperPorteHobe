@@ -101,6 +101,37 @@ shows a stale-data banner once the data is older than `monitoring.stale_after_da
      good config.
 3. Close the issue with a note about what happened.
 
+## Free LLM keys
+
+All LLM features run on free tiers ($0 API spend). Put keys in `.env` (see `.env.example`)
+or in GitHub Actions secrets; never in YAML.
+
+| Provider | Where | Env var | Notes |
+|---|---|---|---|
+| **Gemini** (required) | Google AI Studio → "Get API key" | `GEMINI_API_KEY` | Free tier. Check your limits at AI Studio → rate limits. One project = one quota; extra keys in the same project don't add quota. **Do not enable billing** on that project. |
+| Groq (optional) | console.groq.com → API keys | `GROQ_API_KEY` | Free tier, per-organization limits shown in the console. Don't add a payment method. |
+| OpenRouter (optional) | openrouter.ai → keys | `OPENROUTER_API_KEY` | Only models ending in `:free` cost nothing. Don't buy credits. |
+
+`llm.provider` picks the mode: `live` calls the providers, `fake` is for tests, `none` makes
+every LLM feature use its heuristic fallback. `python -m scholargrid.llm check` is the first
+diagnostic when something LLM-related misbehaves.
+
+## Running on free quota
+
+1. Copy your real limits from AI Studio into `llm.limits` (the defaults are guesses).
+2. Run `python -m scholargrid.llm estimate --task extract --n <scope size>` (light; runs anywhere).
+3. Let GitHub Actions run the pipeline daily (the `dev-build` workflow, started once a day, until the
+   daily workflow exists). Each run extracts until the quota is exhausted, then **publishes anyway**,
+   with heuristic extraction for the rest. The next run continues where it stopped. Don't run large
+   pipelines on the laptop.
+4. To go faster: add Groq or OpenRouter `:free` models to the `extract` route, raise `pack_size`
+   (4 → 6; check that truncations stay rare in `python -m scholargrid.llm usage`), or narrow `scope`.
+
+```bash
+python -m scholargrid.llm quota      # used today / rpd per route, exhausted-until, next reset
+python -m scholargrid.llm usage      # requests and tokens by task and route this month
+```
+
 ## Updating relevance judgments
 
 ```bash

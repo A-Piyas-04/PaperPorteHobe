@@ -1,0 +1,20 @@
+# NLP (cs.CL) development profile. Run it through the `dev-build` GitHub workflow, not locally:
+# 6,000 abstracts, 600 papers get full text + LLM extraction (~150 packed requests,
+# about one day of free Flash-Lite quota).
+extends: config.yaml
+
+data:
+  source: arxiv_api
+  arxiv_queries: ["cat:cs.CL"]
+  categories: [cs.CL]
+  profile: custom
+  max_papers: 6000
+  date_start: "2022-01-01"
+
+llm:
+  provider: live
+
+scope:
+  name: nlp
+  categories: [cs.CL]
+  max_papers: 600

@@ -9,3 +9,6 @@ data:
 
 app:
   allow_grow: false              # visitors must not be able to start a 40-minute harvest
+
+llm:
+  provider: live

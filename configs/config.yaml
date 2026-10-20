@@ -257,6 +257,7 @@ validation:
     min_span_months: 24
     max_noise_fraction: 0.35
     min_cluster_stability_ari: 0.5
+    min_quote_verified_rate: 0.7   # advisory: low means the extraction prompt or verifier needs work
   required_gates: [search_ndcg_at_10, quality_checks, min_cluster_stability_ari]
 
 # ---------------------------------------------------------------------------
@@ -280,3 +281,232 @@ app:
   max_area_papers: 400           # Map focuses on at most this many papers per area (most-cited first)
   pre_warm: true                 # load the bundle and embedding model at startup
   allow_grow: true               # show the "Grow collection" button on About (turn off for public sites)
+
+# ---------------------------------------------------------------------------
+# LLM layer (plan 01): FREE providers only. provider: live | fake (tests) | none (heuristics).
+# Daily limits are per Google Cloud project and reset at midnight Pacific.
+# COPY YOUR REAL LIMITS from https://aistudio.google.com/rate-limit into `limits` below;
+# the defaults are deliberately conservative guesses.
+# Free-tier content may be used by Google to improve its products: we only send public
+# paper text and anonymous queries; users are warned before sending their own text.
+# ---------------------------------------------------------------------------
+llm:
+  provider: none
+  providers:
+    gemini:     {kind: gemini, api_key_env: GEMINI_API_KEY, quota_tz: America/Los_Angeles}
+    groq:       {kind: openai_compat, enabled: false, base_url: "https://api.groq.com/openai/v1",
+                 api_key_env: GROQ_API_KEY, json_mode: object, quota_tz: UTC}
+    openrouter: {kind: openai_compat, enabled: false, base_url: "https://openrouter.ai/api/v1",
+                 api_key_env: OPENROUTER_API_KEY, json_mode: object, quota_tz: UTC}
+    # Local models (Ollama) and paid providers (xAI) are deferred: see LATER_NOT_NOW.md.
+  limits:
+    "gemini:gemini-3.5-flash-lite": {rpm: 10, rpd: 250}
+    "gemini:gemini-3.8-flash":      {rpm: 5, rpd: 100}
+    "gemini:gemini-3.6-flash":      {rpm: 5, rpd: 100}
+    "groq:openai/gpt-oss-120b":     {rpm: 30, rpd: 1000, tpm: 8000}
+  tasks:
+    extract:        {route: ["gemini:gemini-3.5-flash-lite"], thinking: minimal, max_output_tokens: 16384, pack_size: 4, expected_output_tokens: 1200}
+    label:          {route: ["gemini:gemini-3.5-flash-lite"], thinking: minimal, max_output_tokens: 12288, pack_size: 6, expected_output_tokens: 400}
+    reason:         {route: ["gemini:gemini-3.5-flash-lite"], thinking: minimal, max_output_tokens: 4096, pack_size: 6, expected_output_tokens: 200}
+    judge:          {route: ["gemini:gemini-3.8-flash", "gemini:gemini-3.5-flash-lite"], thinking: low, max_output_tokens: 12288, pack_size: 5, expected_output_tokens: 400}
+    synthesize_gap: {route: ["gemini:gemini-3.8-flash", "gemini:gemini-3.5-flash-lite"], thinking: medium, max_output_tokens: 16384, expected_output_tokens: 1500}
+    plan:           {route: ["gemini:gemini-3.8-flash", "gemini:gemini-3.5-flash-lite"], thinking: medium, max_output_tokens: 24576, expected_output_tokens: 3500}
+    check:          {route: ["gemini:gemini-3.5-flash-lite"], thinking: minimal, max_output_tokens: 1024, expected_output_tokens: 50}
+  max_concurrency: 2
+  timeout_s: 120
+  max_retries: 3
+  max_wait_s: 90
+  cache_dir: data/llm_cache
+  usage_dir: data/llm_usage
+  budget:
+    offline_max_requests: null      # stop a pipeline run after this many requests (null = until quota)
+    online_daily_requests: 300      # plan 11: all visitors combined, server key only
+    online_session_requests: 40     # plan 11: per browser session
+  allow_byok: true                  # visitors may paste their OWN free Gemini key (plan 11)
+
+# Which papers get full text + LLM extraction (plans 02-03).
+scope:
+  name: all
+  categories: all
+  min_date: null
+  max_papers: 300                   # dev default: fits in ~1 day of free quota with packing
+  priority: most_cited
+
+# ---------------------------------------------------------------------------
+# Full text (plan 02): fetched for papers in `scope` only. Authors state open
+# problems in Limitations / Future Work, which abstracts rarely contain.
+# arXiv asks for at most one request every 3 seconds - do not lower that.
+# ---------------------------------------------------------------------------
+fulltext:
+  enabled: true
+  source: arxiv                  # arxiv | synthetic (offline demo/CI) | none
+  order: [arxiv_html, ar5iv, pdf]
+  pdf_backend: pypdf
+  request_interval_s: 3.0
+  timeout_s: 30
+  max_retries: 3
+  max_download_mb: 30
+  store_dir: data/fulltext
+  keep_kinds: [abstract, introduction, experiments, results, discussion, limitations,
+               future_work, threats_to_validity, broader_impact, conclusion]
+  max_section_chars: 8000
+  max_paper_chars: 40000
+  refetch_failed_days: 30
+  flush_every: 50
+  max_papers_per_run: null
+
+# ---------------------------------------------------------------------------
+# Per-paper extraction (plan 03): facets + authors' own open problems (with
+# verified verbatim quotes). auto = LLM when llm.provider is live/fake, else heuristics.
+# ---------------------------------------------------------------------------
+extract:
+  enabled: true
+  mode: auto
+  store_dir: data/extract
+  max_input_chars: 24000
+  section_budget: {abstract: 3000, introduction: 3500, experiments: 3500, results: 2500,
+                   discussion: 3000, limitations: 4000, future_work: 3000,
+                   threats_to_validity: 2000, conclusion: 3000, broader_impact: 1500}
+  max_cue_sentences: 25
+  abstract_only_fallback: true
+  max_llm_attempts: 3
+  quote_min_ratio: 90
+  max_problems_per_paper: 6
+  max_findings_per_paper: 5
+  on_quota: heuristic               # quota used up mid-run: heuristic (fill in now, upgrade on a later run) | skip | stop
+  canonical_min_cosine: 0.88        # facet strings merge only if BOTH embedding and
+  canonical_min_string_ratio: 80    # string similarity agree (BERT != RoBERTa)
+
+# ---------------------------------------------------------------------------
+# Foundations and reading paths (plan 04): co-citation backbone per area,
+# including pre-2023 works outside the corpus (metadata from OpenAlex, cached).
+# ---------------------------------------------------------------------------
+foundations:
+  enabled: true
+  min_citing_papers: 3              # a foundation is cited by at least this many papers in the area...
+  min_share: 0.03                   # ...and by at least this share of them
+  top_per_area: 30
+  lift_epsilon: 0.002               # smoothing for lift = area share / corpus share
+  lookup_batch: 50                  # work IDs per OpenAlex request (max 100)
+  lookup_ttl_days: 90               # refresh cached work metadata after this long
+  lookup_timeout_s: 20
+  online_deadline_s: 6              # app: stop waiting for OpenAlex lookups after this long
+  path_sizes: {survey: 3, foundation: 6, recent: 6, frontier: 5}
+  recent_months: 24                 # "key recent" window
+  frontier_months: 6                # "frontier" window
+  llm_reasons: true                 # plain-language why-read / what-you-learn (task `reason`)
+
+# ---------------------------------------------------------------------------
+# Topic workspace (plan 05): one query -> its own sub-topics, labels and
+# reading path, built online and cached. About 3 free LLM requests per topic.
+# ---------------------------------------------------------------------------
+workspace:
+  enabled: true
+  max_papers: 500                   # collection papers retrieved per topic
+  min_papers: 25                    # warn below this ("try a broader phrase")
+  live: true                        # add one page of arXiv/OpenAlex/Semantic Scholar results
+  embed_missing_live: 50            # embed at most this many unembedded live papers per topic
+  subtopic_k_range: [4, 12]         # k chosen by cosine silhouette
+  min_subtopic_size: 8              # smaller groups merge into their nearest neighbour
+  micro_min_size: 40                # only sub-topics this large get micro-topics
+  micro_k_range: [2, 4]
+  min_silhouette_micro: 0.05
+  label_with_llm: true              # plain-language names + summaries (task `label`, packed)
+  overview_with_llm: true
+  representative_per_subtopic: 8
+  cache_dir: data/workspaces
+  cache_ttl_hours: 72
+  max_cached: 500
+
+# ---------------------------------------------------------------------------
+# Gap Engine (plan 06): evidence-backed open problems. Precision over recall:
+# defaults are strict on purpose. Offline = per-area cards in gaps.json;
+# online = topic cards (~16 free LLM requests per topic with these defaults).
+# ---------------------------------------------------------------------------
+gaps:
+  enabled: true
+  detectors: [stated, combinatorial, evaluation, unsettled, bridge]
+  problem_cluster_distance: 0.25    # stated: problems closer than this (cosine distance) are "the same problem"
+  min_support: 3                    # stated: a problem needs this many distinct papers stating it
+  addressed_sim: 0.70               # stated: later papers this similar become "possibly related later work"
+  longstanding_min_months: 24       # stated: open this long, and still stated recently -> long-standing
+  combo_pairs: ["method:task", "method:domain", "task:language", "method:modality"]
+  min_marginal: 5                   # combination: each value needs this many papers
+  min_expected: 3.0                 # combination: expected co-occurrences under independence at least this
+  max_observed: 0                   # combination: observed co-occurrences at most this
+  max_p: 0.05                       # combination: Poisson p-value threshold for "rarer than chance"
+  min_bridge_sim: 0.60              # combination: similarity of a "bridge" value that makes the pair plausible
+  require_bridge: true              # combination: no bridge -> usually two unrelated communities, not a gap
+  combo_top_values: 60              # combination: only the most frequent values per facet
+  eval_min_papers: 5                # evaluation: a method needs this many papers
+  eval_max_datasets: 2              # evaluation: at most this many distinct benchmarks -> "narrow"
+  eval_min_known: 0.5               # evaluation: profile share computed only when known for this share of papers
+  unsettled_min_papers: 2           # unsettled: distinct papers reporting on the same task/dataset/metric
+  bridge_sim_quantile: 0.9          # bridge: only group pairs above this quantile of similarity
+  bridge_max_ratio: 0.25            # bridge: cross-citations at most this share of expected
+  bridge_min_ref_coverage: 0.3      # bridge: both groups need reference data for this share of papers
+  max_candidates_per_scope: 30      # candidates per area/topic sent to the LLM steps
+  max_cards_per_scope: 12           # cards kept per area
+  judge_with_llm: true              # plausibility judge for combinations, conflict judge for unsettled
+  synthesize_with_llm: true         # plain-language cards (template wording without an LLM)
+  novelty_check: true               # check recent papers (collection; + live sources online)
+  novelty_recent_months: 18         # novelty: only papers this recent can "already address" a gap
+  novelty_collection_top: 10        # novelty: nearest recent collection papers considered
+  novelty_top_judge: 4              # novelty: candidates judged by the LLM (one packed request)
+  novelty_live_queries: 3           # novelty: live searches per card (online)
+  novelty_ttl_days: 30              # novelty: offer "Check novelty now" after this long
+  weights: {evidence: 0.30, novelty: 0.25, feasibility: 0.20, specificity: 0.15, recency: 0.10}
+  online_max_new_cards: 8           # new cards per topic (each costs ~1 synthesis request)
+  keep_already_addressed: false     # true: list them under "Already explored" instead of dropping
+
+# ---------------------------------------------------------------------------
+# Starter research plans (plan 07): one LLM request per plan (task `plan`).
+# Venues, people and code links are computed, never generated.
+# ---------------------------------------------------------------------------
+plan:
+  enabled: true
+  max_references: 16                # numbered references [R#] the plan may use
+  related_top: 12                   # related papers added by similarity to the gap statement
+  foundations_top: 4                # foundations/surveys from the reading path
+  weeks_options: [6, 8, 10, 12]
+  default_weeks: 10
+  max_background_chars: 400         # the user's background text is capped and sent as untrusted data
+  people_top: 8                     # most frequent authors among the referenced papers
+  venues_top: 6
+
+# ---------------------------------------------------------------------------
+# Durable projects (plan 08). SQLite locally; production uses an external free
+# Postgres via SCHOLARGRID_DB_URL (Hugging Face Spaces disks are ephemeral).
+# ---------------------------------------------------------------------------
+persistence:
+  enabled: true
+  db_url_env: SCHOLARGRID_DB_URL
+  default_url: "sqlite:///data/app.db"
+  auth: none                        # none (capability links) | oidc (Streamlit st.login, see Docs/deployment.md)
+  oidc_provider: null               # name of an [auth.<provider>] block in .streamlit/secrets.toml
+  allow_anonymous_projects: true    # projects reachable by an unguessable link (?p=&k=)
+  max_projects_per_user: 50
+  max_items_per_project: 1000       # per kind (papers, open problems, plans, notes)
+  max_note_chars: 10000
+  anonymous_retention_days: 365     # `python -m scholargrid.persistence purge` deletes older link-only projects
+  create_rate_per_hour: 10          # new projects per browser session per hour
+
+# ---------------------------------------------------------------------------
+# Evaluation (plan 09): blind rating rounds and quality metrics. The Evaluate and
+# Admin pages appear only with SCHOLARGRID_EVAL_MODE=1 or an admin sign-in.
+# ---------------------------------------------------------------------------
+evaluation:
+  enabled: true
+  eval_mode_env: SCHOLARGRID_EVAL_MODE
+  admin_emails_env: SCHOLARGRID_ADMIN_EMAILS
+  overlap_share: 0.2                # share of items every rater sees (for inter-rater agreement)
+  sample_seed: 7
+  report_dir: reports/eval
+
+# Product telemetry: anonymous event names, counts and timings; a hash of the
+# topic text, never the text itself unless store_queries is true. Opt-out on About.
+telemetry:
+  enabled: true
+  store_queries: false
+  retention_days: 180               # `python -m scholargrid.persistence purge-events`
+  sample_rate: 1.0

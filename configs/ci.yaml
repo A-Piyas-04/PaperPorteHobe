@@ -25,3 +25,9 @@ cluster:
 
 sparse:
   min_corpus_size: 1000
+
+llm:
+  provider: none
+
+fulltext:
+  source: synthetic

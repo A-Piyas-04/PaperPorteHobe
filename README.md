@@ -175,3 +175,10 @@ See the [documentation guide](Docs/README.md) and [UX review](Docs/ux-review.md)
 
 ---
 
+## Changelog
+
+- **Research-starter journey (upgrade plans 01–05):** the app now opens on **Start** (`/start`):
+  describe a topic, see its sub-topics (**Topic**, `/topic`) and an ordered reading path
+  (**Read first**, `/read-first`). The former home page moved from `/home` to `/search`
+  ("Search papers"); Map, All areas, Trends, Reading list, Leads and About are under **More**.
+

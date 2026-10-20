@@ -41,6 +41,7 @@ _GATES = {
     "min_cluster_stability_ari": (("clusters", "stability", "mean_ari"), ">="),
     "min_ann_recall": (("index", "recall_at_25"), ">="),
     "min_openalex_match_rate": (("enrichment", "match_rate_older_3m"), ">="),
+    "min_quote_verified_rate": (("extraction", "quote_verified_rate"), ">="),
 }
 
 
@@ -50,7 +51,8 @@ def validate(cfg: Config, df: pd.DataFrame, embeddings: np.ndarray, reduced: np.
              quality: Optional[Dict] = None,
              growth: Optional[Dict] = None, stability: Optional[Dict] = None,
              ann_recall: Optional[float] = None, enrichment: Optional[Dict] = None,
-             cluster_match: Optional[Dict] = None, write: bool = True) -> Dict:
+             cluster_match: Optional[Dict] = None, extraction: Optional[Dict] = None,
+             write: bool = True) -> Dict:
     from .quality import span_months
 
     clusters = _validate_clusters(df, reduced, embeddings, labels, clusters_meta)
@@ -68,6 +70,7 @@ def validate(cfg: Config, df: pd.DataFrame, embeddings: np.ndarray, reduced: np.
         "index": {"backend": getattr(index, "backend", "exact"), "recall_at_25": ann_recall},
         "enrichment": enrichment or {},
         "cluster_match": cluster_match or {},
+        "extraction": extraction or {},
     }
     report["gates"] = evaluate_gates(cfg, report)
     if write:
@@ -357,6 +360,32 @@ def _validate_projection(sparse_leads: list, cfg: Config) -> Dict:
 
 
 # ---------------------------------------------------------------------------
+# Extraction (plan 03)
+# ---------------------------------------------------------------------------
+def extraction_summary(bundle_dir: str, extract_stats: Optional[Dict]) -> Dict:
+    """Papers with extraction, LLM vs heuristic share, verified problems per paper, top facets."""
+    stats = extract_stats or {}
+    vocab_path = os.path.join(bundle_dir, "facet_vocab.json")
+    vocab = load_json(vocab_path) if os.path.exists(vocab_path) else {}
+    prof_path = os.path.join(bundle_dir, "paper_profile.parquet")
+    prob_path = os.path.join(bundle_dir, "problems.parquet")
+    profiles = pd.read_parquet(prof_path) if os.path.exists(prof_path) else pd.DataFrame()
+    problems = pd.read_parquet(prob_path) if os.path.exists(prob_path) else pd.DataFrame()
+    n = int(len(profiles))
+    modes = profiles["mode"].astype(str) if n else pd.Series(dtype=str)
+    return {
+        "papers_with_extraction": n,
+        "llm_share": round(float(modes.str.startswith("llm").mean()), 4) if n else None,
+        "heuristic_share": round(float(modes.str.startswith("heuristic").mean()), 4) if n else None,
+        "mean_verified_problems": round(len(problems) / n, 3) if n else None,
+        "quote_verified_rate": stats.get("quote_verified_rate"),
+        "pending_llm": stats.get("pending_llm"),
+        "top": {f: [[k, int(v["count"])] for k, v in list((vocab.get(f) or {}).items())[:10]]
+                for f in ("task", "method", "dataset")},
+    }
+
+
+# ---------------------------------------------------------------------------
 # Reports
 # ---------------------------------------------------------------------------
 def _append_history(cfg: Config, report: Dict) -> None:
@@ -460,6 +489,22 @@ def _write_markdown(cfg: Config, report: Dict) -> None:
         f"- Sparse leads reported: **{p['n_leads']}**",
         f"- Mean robustness: **{_fmt(p.get('mean_robustness'))}** (threshold {p['min_robustness_threshold']})",
         "",
+    ]
+    x = report.get("extraction") or {}
+    if x:
+        lines += [
+            "## Extraction (plan 03)",
+            f"- Papers with extraction: **{x.get('papers_with_extraction', 0)}** · LLM share: "
+            f"**{_fmt(x.get('llm_share'))}** · heuristic share: **{_fmt(x.get('heuristic_share'))}**",
+            f"- Verified problems per paper: **{_fmt(x.get('mean_verified_problems'))}** · quote verified rate "
+            f"(this run): **{_fmt(x.get('quote_verified_rate'))}** · waiting for an LLM pass: "
+            f"{_fmt(x.get('pending_llm'))}",
+        ]
+        for facet, top in (x.get("top") or {}).items():
+            if top:
+                lines.append(f"- Top {facet}s: " + ", ".join(f"{k} ({v})" for k, v in top))
+        lines.append("")
+    lines += [
         "> Reminder: sparsity is not proof of novelty; growth is not research quality; "
         "the 2D map is a visualisation, not evidence by itself.",
     ]

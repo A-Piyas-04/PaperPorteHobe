@@ -170,7 +170,7 @@ def render() -> None:
     event = explorer(payload, highlight=_remap(st.session_state.get("explore_hl"), pos),
                      focus_area=focus, select=select,
                      height=960,
-                     saved_ids=list(st.session_state.get("saved_papers", {})), key="explorer")
+                     saved_ids=sorted(ui.saved_paper_ids()), key="explorer")
 
     if not event or event.get("nonce") == st.session_state.get("_explore_nonce"):
         return

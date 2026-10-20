@@ -42,3 +42,9 @@ validation:
 
 monitoring:
   json_logs: true
+
+llm:
+  provider: live
+
+scope:
+  max_papers: null

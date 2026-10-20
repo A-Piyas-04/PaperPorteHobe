@@ -136,27 +136,9 @@ def _filters(bundle) -> tuple[tuple, str, float]:
 
 
 def _bibtex(rows: list) -> str:
-    out = []
-    for r in rows:
-        aid = str(r.get("arxiv_id") or "")
-        doi = str(r.get("doi") or "")
-        pid = str(r.get("paper_id") or aid)
-        key = "".join(ch if ch.isalnum() else "_" for ch in (f"arxiv{aid}" if aid else pid))
-        authors = " and ".join(a.strip() for a in str(r.get("authors") or "").split(";") if a.strip())
-        fields = [("title", r.get("title", "")), ("author", authors), ("year", str(r.get("date") or "")[:4])]
-        if aid:
-            fields += [("eprint", aid), ("archivePrefix", "arXiv"),
-                       ("primaryClass", r.get("primary_category") or "")]
-        if doi:
-            fields.append(("doi", doi))
-        if r.get("venue") and not aid:
-            fields.append(("howpublished", r["venue"]))
-        url = ui.paper_url(pid, r.get("url") or None) or (f"https://doi.org/{doi}" if doi else "")
-        if url:
-            fields.append(("url", url))
-        body = ",\n".join(f"  {k} = {{{v}}}" for k, v in fields if v)
-        out.append(f"@misc{{{key},\n{body}\n}}")
-    return "\n\n".join(out) + "\n"
+    from scholargrid.bibtex import to_bibtex
+
+    return to_bibtex(rows)
 
 
 # ---------------------------------------------------------------------------
@@ -335,7 +317,7 @@ def _results(bundle, query: str) -> None:
 
         from views.library import toggle
 
-        saved = st.session_state.get("saved_papers", {})
+        saved = ui.saved_paper_ids()
         with slot.container():
             if notes:
                 ui.note(" ".join(html.escape(n) for n in notes))
@@ -357,8 +339,7 @@ def _results(bundle, query: str) -> None:
                     pid = r["paper_id"]
                     is_saved = pid in saved
                     b1, b2, _ = st.columns([1.4, 1, 2.6])
-                    b1.button("Remove from reading list" if is_saved else "Save to reading list",
-                              key=f"save_{pid}_{n}", on_click=toggle, args=(pid, r))
+                    b1.button(ui.paper_save_label(is_saved), key=f"save_{pid}_{n}", on_click=toggle, args=(pid, r))
                     b2.button("More like this", key=f"like_{pid}_{n}", type="tertiary",
                               on_click=_set_query, args=(f"{_LIKE}{pid}",))
                     n += 1

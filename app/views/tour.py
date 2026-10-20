@@ -109,7 +109,7 @@ STEPS: list[dict] = [
 TOTAL = len(STEPS)
 
 _FALLBACK_TITLES = {
-    "home": "Find papers", "explore": "Workspace", "areas": "Areas",
+    "home": "Search papers", "explore": "Map", "areas": "All areas",
     "trends": "Trends", "leads": "Leads", "library": "Reading list",
 }
 

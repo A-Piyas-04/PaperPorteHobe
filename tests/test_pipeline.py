@@ -31,6 +31,14 @@ def test_bundle_shape(built):
     assert meta["counts"]["clusters"] >= 3
     assert meta["snapshot"]["source"] == "synthetic"
     assert {"ingest", "embed", "cluster", "growth"} <= set(meta["stage_timings"])
+    assert meta["fulltext"]["ok"] > 0
+    assert meta["extract"]["in_scope"] > 0
+    assert len(b.problems) > 0 and len(b.facets) > 0 and b.facet_vocab["dataset"]
+    cards = [c for cs in b.gaps["areas"].values() for c in cs]
+    assert cards and all(c["evidence"] and c["why_it_might_not_be_a_gap"] for c in cards)
+    assert all(c["novelty"]["status"] != "not_checked" for c in cards)
+    quotes = set(b.problems["quote"])
+    assert all(e["quote"] in quotes for c in cards for e in c["evidence"] if e["quote"])
 
 
 def test_validation_report_and_release(built):
