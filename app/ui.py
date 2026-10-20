@@ -488,9 +488,31 @@ def inject_css() -> None:
 # ---------------------------------------------------------------------------
 # Data access
 # ---------------------------------------------------------------------------
+def _apply_demo_overrides(cfg):
+    """Serving the synthetic demo bundle (not in production): run the whole journey offline."""
+    from scholargrid.release import resolve_bundle_dir
+    from scholargrid.utils import load_json
+
+    if cfg.is_production:
+        return cfg
+    try:
+        meta = load_json(os.path.join(resolve_bundle_dir(cfg), "meta.json"))
+    except Exception:
+        return cfg
+    if (meta.get("snapshot") or {}).get("source") != "synthetic":
+        return cfg
+    if cfg.raw["llm"]["provider"] == "none":
+        cfg.raw["llm"]["provider"] = "fake"
+    cfg.raw["search"]["live"] = False
+    cfg.raw["workspace"]["live"] = False
+    if cfg.raw["persistence"]["default_url"] == "sqlite:///data/app.db":
+        cfg.raw["persistence"]["default_url"] = "sqlite:///data/demo_app.db"
+    return cfg
+
+
 @st.cache_resource(show_spinner=False)
 def get_config():
-    return load_config()
+    return _apply_demo_overrides(load_config())
 
 
 @st.cache_data(show_spinner=False, ttl=20)
@@ -900,7 +922,8 @@ def global_notices(bundle) -> None:
              "(BM25) until the embedding model loads again.")
     snap = bundle.meta.get("snapshot", {})
     if snap.get("source") == "synthetic":
-        note("<b>Demo data.</b> This landscape is built from synthetic papers, not real arXiv records.")
+        note("<b>Demo data.</b> This landscape is built from synthetic papers, not real arXiv records. "
+             "Demo: papers, problems and plans are generated from synthetic data to show how the tool works.")
 
 
 def attribution_footer() -> None:

@@ -64,7 +64,6 @@ def render() -> None:
         st.markdown("""
 - Research areas are **automatic groupings, not an authoritative taxonomy**. Check the papers behind each label.
 - **Citations lag.** Very recent papers have few or none yet. A zero count may also reflect missing metadata.
-- **Quiet ≠ new.** A sparse spot may just mean few papers were collected.
 - **More papers ≠ better research.** Activity is not quality.
 - **Growth needs history.** Areas are only called growing when the evidence is strong enough;
   everything else shows counts only.

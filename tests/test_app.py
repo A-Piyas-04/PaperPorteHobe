@@ -11,8 +11,8 @@ from scholargrid.pipeline import run
 
 AppTest = pytest.importorskip("streamlit.testing.v1").AppTest
 APP_DIR = os.path.join(ROOT, "app")
-PAGES = ["home", "areas", "trends", "leads", "about", "explore", "library", "start", "topic", "reading", "gaps",
-         "plan", "project"]
+PAGES = ["home", "areas", "trends", "about", "explore", "library", "start", "topic", "reading", "gaps",
+         "plan", "project"]          # "leads" only with app.show_legacy_leads
 
 
 @pytest.fixture(scope="module")
@@ -97,10 +97,10 @@ def _tour_script(tmp_path) -> str:
         import ui
         ui.inject_css()
         ui.ensure_loaded()
-        from views import home, tour
+        from views import start, tour
         tour.header_control()
         tour.render_dock()
-        home.render()
+        start.render()
     """), encoding="utf-8")
     return str(path)
 
@@ -304,6 +304,51 @@ def test_evaluate_hidden_without_eval_mode(app_config, monkeypatch):
     at = AppTest.from_file(os.path.join(APP_DIR, "streamlit_app.py"), default_timeout=120).run()
     assert not at.exception, at.exception
     assert "evaluate" not in at.session_state["_pages"]
+
+
+def test_nav_has_no_leads_by_default(app_config):
+    at = AppTest.from_file(os.path.join(APP_DIR, "streamlit_app.py"), default_timeout=120).run()
+    assert not at.exception, at.exception
+    assert "leads" not in at.session_state["_pages"]
+
+
+def test_trends_has_both_tabs_and_caption(app_config, tmp_path):
+    at = AppTest.from_file(_script(tmp_path, "trends"), default_timeout=120).run()
+    assert not at.exception, at.exception
+    assert [t.label for t in at.tabs][:2] == ["Where to look", "Growth details"]
+    assert any("Chart summary" in c.value for c in at.caption)
+
+
+@pytest.mark.parametrize("page,nxt", [("topic", "See what to read first"),
+                                      ("reading", "Find open problems in this topic"),
+                                      ("gaps", "Turn a problem you like into a starter plan")])
+def test_journey_pages_show_bar_and_next_step(app_config, tmp_path, page, nxt):
+    at = AppTest.from_file(_script(tmp_path, page), default_timeout=180)
+    at.session_state["topic_query"] = "language models"
+    at.run()
+    assert not at.exception, at.exception
+    text = " ".join(m.value for m in at.markdown)
+    assert "sg-journey-bar" in text and nxt in text
+
+
+def test_about_sections_and_glossary(app_config, tmp_path):
+    at = AppTest.from_file(_script(tmp_path, "about"), default_timeout=120).run()
+    assert not at.exception, at.exception
+    text = " ".join(m.value for m in at.markdown)
+    assert "How open problems are found" in text and "Privacy" in text
+    _import_explore()
+    from glossary import GLOSSARY, term
+
+    out = term("baseline")
+    assert out.startswith("<abbr") and GLOSSARY["baseline"] in out
+
+
+def test_start_page_in_demo_mode_lists_demo_topics(app_config, tmp_path):
+    ui, _ = _import_explore()
+    at = AppTest.from_file(_script(tmp_path, "start"), default_timeout=120).run()
+    assert not at.exception, at.exception
+    labels = [b.label for b in at.button]
+    assert all(t in labels for t in ui.DEMO_TOPIC_EXAMPLES)
 
 
 def test_area_detail_shows_read_first(app_config, tmp_path):

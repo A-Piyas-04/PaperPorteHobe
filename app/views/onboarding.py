@@ -27,13 +27,27 @@ def render() -> None:
             st.caption("Settings live in configs/config.yaml.")
 
 
-def _build_demo() -> None:
-    from scholargrid.runner import run
-
+def demo_config():
+    """The offline demo build: synthetic papers, fake LLM, synthetic full text, no live sources."""
     demo = load_config()
     demo.raw["data"]["source"] = "synthetic"
     demo.raw["data"]["max_papers"] = 800
+    demo.raw["llm"]["provider"] = "fake"            # deterministic, no key, no cost
+    demo.raw["fulltext"]["source"] = "synthetic"
+    demo.raw["search"]["live"] = False
+    demo.raw["workspace"]["live"] = False
+    demo.raw["enrich"]["openalex"] = False
+    demo.raw["persistence"]["default_url"] = "sqlite:///data/demo_app.db"
+    for section, backend in (("embedding", "tfidf"), ("reduce", "pca"), ("landscape", "pca"), ("cluster", "kmeans")):
+        demo.raw[section]["backend"] = backend
+    demo.raw["sparse"]["min_corpus_size"] = 100
+    return demo
+
+
+def _build_demo() -> None:
+    from scholargrid.runner import run
+
     bar = st.progress(0.0, "Starting…")
-    run(demo, progress=lambda f, m: bar.progress(min(f, 1.0), m))
+    run(demo_config(), progress=lambda f, m: bar.progress(min(f, 1.0), m))
     st.cache_resource.clear()
     st.rerun()
