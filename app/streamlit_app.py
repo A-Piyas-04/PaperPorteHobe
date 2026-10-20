@@ -108,8 +108,9 @@ def main() -> None:
         _friendly_error(exc)
         return
 
-    from scholargrid.llm.context import current_session
     from telemetry import session_id
+
+    from scholargrid.llm.context import current_session
 
     current_session.set(session_id())        # the online free-quota guard counts per browser session
     pages = _build_pages()

@@ -34,8 +34,11 @@ The running app switches to it automatically.
 
 ## 1. Choose where to host it
 
+> This project uses **Option B** only. Option A is paid and deferred; see
+> `Docs/upgrade-use-case/implementation_plans/LATER_NOT_NOW.md`. Section 9 covers the
+> research-starter features (free LLM tier, Postgres, login, scheduled workflows).
 
-|                             | **Option A: your own server (recommended)**                                              | **Option B: Hugging Face Spaces**                                             |
+|                             | **Option A: your own server**                                                            | **Option B: Hugging Face Spaces**                                             |
 | --------------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | Cost                        | about €4–6/month (Hetzner) or about $24/month (DigitalOcean) + a domain (about $10/year) | Free                                                                          |
 | Address                     | your own domain, e.g. `papers.example.com`                                               | `https://<user>-<space>.hf.space`                                             |
@@ -449,7 +452,7 @@ hf auth login                    # paste the Write token (older versions: huggin
 
 $dst = "$HOME\scholargrid-space"
 New-Item -ItemType Directory -Force $dst | Out-Null
-Copy-Item -Recurse -Force scholargrid, app, configs, .streamlit, app.py, requirements.txt, Dockerfile $dst
+Copy-Item -Recurse -Force scholargrid, app, configs, .streamlit, scripts, app.py, alembic.ini, requirements.txt, Dockerfile $dst
 New-Item -ItemType Directory -Force "$dst\data\releases" | Out-Null
 Copy-Item -Recurse -Force data\releases\<id> "$dst\data\releases\"
 Copy-Item -Force data\releases\CURRENT "$dst\data\releases\"
@@ -599,6 +602,23 @@ one named in `CURRENT`).
 - [ ] The site works on a phone.
 - [ ] UptimeRobot (and Sentry, if used) are set up.
 
+Research-starter launch (section 9):
+
+- [ ] Plan 09 gap round: precision ≥ 60%, novelty false positives ≤ 15%, recorded
+- [ ] Extraction round: problem precision ≥ 80%, using the route chosen with `compare-extract`
+- [ ] 5 unaided user walkthroughs done; top issues fixed
+- [ ] Real limits copied into `llm.limits`; the server key works on the Space (AI features on, no `LLMUnavailable` in the Space logs)
+- [ ] Nothing paid: no billing on the Google Cloud project, no payment method on Groq / OpenRouter / Neon / Hugging Face / GitHub
+- [ ] Publishing from Actions to the Space (section 9.6) worked once
+- [ ] The pipeline cap + online allowance stay below the project's RPD; the daily workflow ran once successfully
+- [ ] Postgres configured, migrations applied, a backup restore tested
+- [ ] Kill switch tested (`SCHOLARGRID_LLM_PROVIDER=none` → app works); "allowance used up" path tested
+- [ ] BYOK tested end to end with a fresh free key; the key never appears in logs or Sentry
+- [ ] Rate limits tested
+- [ ] About page: methodology, limitations, privacy (incl. free-tier data use), contact (`app.contact_email`), licences, AI disclosure
+- [ ] Mobile check at 375 px; keyboard-only walkthrough
+- [ ] Demo mode works on a fresh clone without any key
+
 ---
 
 
@@ -636,4 +656,90 @@ run code when loaded.
 is reachable from the internet.
 - Keep the server updated (unattended upgrades from A4) and rebuild the image
 every month or two to pick up library security fixes.
+
+---
+
+## 9. Research-starter features (free tier)
+
+Everything runs on **$0 API spend**: Gemini's free tier (with optional Groq / OpenRouter `:free`
+fallbacks), a free Postgres (Neon), a free Hugging Face Space and free GitHub Actions. Without any
+AI key the app still works: offline cards from the bundle, keyword labels, template cards and plans.
+
+### 9.1 Secrets
+
+| Variable | Where | Required? |
+|---|---|---|
+| `GEMINI_API_KEY` | Space secret + GitHub secret | Required for AI features (free key from Google AI Studio) |
+| `GROQ_API_KEY`, `OPENROUTER_API_KEY` | GitHub secret (optional Space secret) | Optional free fallbacks |
+| `SCHOLARGRID_DB_URL` | Space secret (+ GitHub secret for purges/backups) | Required in production (Postgres) |
+| `OPENALEX_MAILTO`, `S2_API_KEY` | Space + GitHub | Strongly recommended / optional |
+| `HF_TOKEN` (secret) and `HF_SPACE` (variable) | GitHub | For publishing releases to the Space (9.6) |
+| `SCHOLARGRID_ADMIN_EMAILS`, `SCHOLARGRID_EVAL_MODE` | Space | Optional (Evaluate/Admin pages) |
+| `STREAMLIT_SECRETS_TOML_B64` | Space | Optional login (9.3) |
+| `SENTRY_DSN` | Space + GitHub | Optional |
+
+How to get the free keys and copy your real limits from AI Studio into `llm.limits`: see
+`Docs/runbook.md` → "Free LLM keys". **Never enable billing** on the Google Cloud project behind the key.
+
+### 9.2 Postgres on Neon (free)
+
+1. Sign up at neon.tech (no payment method), create a project and a database.
+2. Copy the connection string (`postgresql://user:pass@host/db?sslmode=require`) into the Space secret
+   `SCHOLARGRID_DB_URL`.
+3. The container runs `python -m scholargrid.persistence upgrade` on start (`scripts/start.sh`), so the
+   tables are created automatically.
+4. Backups: the weekly workflow's `db-backup` job keeps a `pg_dump` for 30 days. To restore:
+   `pg_restore --clean --no-owner -d "$SCHOLARGRID_DB_URL" scholargrid-db.dump`.
+5. Stay inside the free storage limit: telemetry events expire after `telemetry.retention_days`, and the weekly
+   job runs `purge-events` and `purge` (link-only projects not updated for a year).
+
+### 9.3 Optional login (Streamlit OIDC)
+
+Set `persistence.auth: oidc` (or the env var `SCHOLARGRID_PERSISTENCE_AUTH=oidc`), then give Streamlit an
+`[auth]` block, base64-encoded into the Space secret `STREAMLIT_SECRETS_TOML_B64`:
+
+```toml
+[auth]
+redirect_uri = "https://<user>-scholargrid.hf.space/oauth2callback"
+cookie_secret = "<long random string>"
+client_id = "<from Google Cloud console>"
+client_secret = "<...>"
+server_metadata_url = "https://accounts.google.com/.well-known/openid-configuration"
+```
+
+Without login, projects are reachable by an unguessable link (`?p=…&k=…`); users can rotate it in
+**My project → Settings**.
+
+### 9.4 Sharing the free quota
+
+Limits are per Google Cloud project. If the pipeline and the app use the same key, they share it:
+
+- The pipeline starts right after the daily reset (midnight Pacific) and is capped by
+  `llm.budget.offline_max_requests` (set in `configs/refresh.yaml`).
+- The app may use at most `llm.budget.online_daily_requests` per day for all visitors and
+  `online_session_requests` per browser session (counted in Postgres, so the cap holds across restarts).
+- Together they must stay below the project's real requests/day. Don't create extra accounts or projects to
+  multiply free quota.
+
+### 9.5 Bring your own key (the main way to scale)
+
+Visitors can paste their **own** free Gemini key (More → Your AI key, or My project → Settings). It is kept
+only in their browser session, never stored or logged, and their requests count against their own quota.
+Disable with `llm.allow_byok: false`.
+
+### 9.6 Scheduled workflows and publishing to the Space
+
+- `.github/workflows/weekly-refresh.yml` (Mondays 08:30 UTC): the full pipeline, then publishes the release.
+- `.github/workflows/daily-extract.yml` (other days 08:45 UTC): `--from-stage fulltext`, continuing full text and
+  extraction where yesterday's quota stopped.
+- Both upload only the current release (and `CURRENT`) to the Space's `data/releases/` when the `HF_TOKEN`
+  secret and the `HF_SPACE` variable (e.g. `<hf-user>/scholargrid`) are set; the Space rebuilds automatically.
+- Actions minutes are unlimited on a **public** repository. On a private free repository (2,000 minutes/month)
+  lower `fulltext.max_papers_per_run` and run the daily job less often.
+
+### 9.7 Kill switch
+
+Set the Space variable `SCHOLARGRID_LLM_PROVIDER=none` and restart: labels become keywords, new cards and plans
+use templates, novelty uses heuristics, and a banner says AI features are temporarily off. Other overrides:
+`SCHOLARGRID_DAILY_LLM_REQUESTS`, `SCHOLARGRID_OFFLINE_MAX_REQUESTS`.
 

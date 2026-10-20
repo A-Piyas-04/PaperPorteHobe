@@ -123,12 +123,11 @@ def test_purge(repo):
 
 
 def test_migrations_idempotent(tmp_path):
+    from conftest import fresh_db
     from sqlalchemy import inspect
 
     from scholargrid.persistence.db import dispose_all, get_engine
     from scholargrid.persistence.migrate import upgrade_to_head
-
-    from conftest import fresh_db
 
     cfg = make_config(tmp_path)
     fresh_db(cfg)

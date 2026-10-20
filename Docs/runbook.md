@@ -132,6 +132,37 @@ python -m scholargrid.llm quota      # used today / rpd per route, exhausted-unt
 python -m scholargrid.llm usage      # requests and tokens by task and route this month
 ```
 
+## Playbooks (free-tier operation)
+
+| Situation | Symptom | Action |
+|---|---|---|
+| Daily free quota used up | "AI allowance used up" notes; `llm quota` shows exhausted routes | Expected on busy days. Point users to their own key (More → Your AI key). Lower `gaps.online_max_new_cards` / `gaps.novelty_top_judge`; check the LLM cache persists (a cache-miss storm wastes quota) |
+| Pipeline extraction progressing slowly | `extract stats` shows many papers waiting for an LLM pass | Normal on free tiers. Add Groq or OpenRouter `:free` to the `extract` route, raise `pack_size` if truncation is rare, or narrow `scope`. Don't move the pipeline to the laptop |
+| GitHub Actions minutes running out | Scheduled jobs stop or are queued | Make the repository public (unlimited minutes), or lower `fulltext.max_papers_per_run` and run the daily job less often |
+| Space asleep | The first visitor waits about a minute | Expected on the free CPU tier (sleeps after 48 h without visitors). No action |
+| Provider limits changed | Unexpected 429s at low counts | Re-read the limits in AI Studio / the provider console; update `llm.limits` |
+| A model was shut down or renamed | `BadRequest` / 404 in the logs for one route | Update `llm.tasks.*.route` to a current free model. Bump the prompt versions if output quality changes |
+| Gemini outage | `LLMError` spikes; template results | Nothing urgent (the app degrades). If prolonged, set `SCHOLARGRID_LLM_PROVIDER=none` to avoid timeouts |
+| Postgres down | Saving fails | The app shows "Couldn't save"; reading still works. Check the provider status and restore from backup |
+| arXiv 429/403 in full text | `fulltext stats` errors climb | Stop; never lower the interval; resume later |
+| Bad gap quality after a release | Evaluation precision drops / "Not useful" spikes | Roll back (`python -m scholargrid.release rollback <id>`), compare the evaluation round, fix thresholds/prompts, bump prompt versions |
+| Leaked project link | A user reports it | My project → Settings → Create a new link |
+| Leaked API key | A key appears in logs, a repo or a screenshot | Delete the key in AI Studio / the console immediately, create a new one, update the secrets |
+
+Logs and Sentry events are scrubbed of API keys, project tokens (`?k=`) and database passwords
+(`scholargrid/redact.py`), but treat any leak as real.
+
+## Recorded measurements
+
+Fill these in as they are measured (plans 02, 03, 05, 06, 09):
+
+- Full-text coverage on real cs.CL (`fulltext stats`, dev-build): _not yet measured_
+- Extraction manual QA (10 papers: real problems %, exact quotes %, missed problems): _not yet measured_
+- Topic workspace timings for 3 real topics (`ws.stats["timings"]`): _not yet measured_
+- Gap-card spot check (3 topics × 10 cards: real & open / solved / nonsense): _not yet measured_
+- Extraction route decision (`compare-extract`): _not yet decided_
+- Latest gap round and extraction round headlines: _not yet run_
+
 ## Updating relevance judgments
 
 ```bash

@@ -15,7 +15,17 @@ from sqlalchemy import func, select
 
 from ..config import Config
 from .db import session_factory
-from .models import Event, LlmUsageDaily, Project, ProjectGap, ProjectNote, ProjectPaper, ProjectPlan, Rating, User
+from .models import (
+    Event,
+    LlmUsageDaily,
+    Project,
+    ProjectGap,
+    ProjectNote,
+    ProjectPaper,
+    ProjectPlan,
+    Rating,
+    User,
+)
 
 PAPER_STATUSES = ("to_read", "reading", "read", "key")
 GAP_STATUSES = ("considering", "shortlisted", "chosen", "rejected")
