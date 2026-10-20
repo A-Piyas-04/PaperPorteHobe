@@ -133,9 +133,37 @@ def render() -> None:
                               args=(s.id,))
         st.caption("Sub-topics group the papers retrieved for your topic; activity is based on those papers, "
                    "not a growth estimate. See Trends for growth statistics.")
+        if len(top) >= 2:
+            _mini_quadrant(top)
 
     unclustered = [p for p in ws.papers if p.subtopic < 0]
     if unclustered:
         with st.expander(f"Other papers found online ({len(unclustered)})"):
             _papers(ws, [p.paper_id for p in unclustered[:30]], key="online")
     st.session_state.j_topic = True
+    ui.next_step("See what to read first", "reading", "An ordered reading path for this topic.")
+
+
+def _mini_quadrant(subs) -> None:
+    import numpy as np
+    import plotly.graph_objects as go
+
+    sizes = np.array([s.size for s in subs], dtype=float)
+    pct = [(sizes < v).mean() + 0.5 * (sizes == v).mean() for v in sizes]
+    with st.expander("Where to look inside this topic"):
+        fig = go.Figure(go.Scatter(
+            x=pct, y=[s.recent_share for s in subs], mode="markers+text", text=[s.name for s in subs],
+            textposition="top center", marker=dict(size=[10 + 4 * np.sqrt(s.n_open_problems + 1) for s in subs],
+                                                    color=ui.ACCENT, opacity=.75),
+            customdata=[[s.size, s.n_open_problems] for s in subs],
+            hovertemplate="%{text}<br>%{customdata[0]} papers · %{y:.0%} from the last 12 months"
+                          "<br>%{customdata[1]} open problems<extra></extra>"))
+        fig.add_vline(x=0.5, line_dash="dot", line_color="#8a93a3")
+        ui.apply_chart_style(fig, height=360)
+        fig.update_layout(xaxis=dict(title="Size (share of sub-topics that are smaller)", range=[-0.05, 1.05]),
+                          yaxis=dict(title="Share of papers from the last 12 months", tickformat=".0%"))
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        busiest = max(subs, key=lambda s: s.recent_share)
+        st.caption("Based on the papers retrieved for your topic; not a growth estimate. Chart summary: "
+                   f"{len(subs)} sub-topics; the largest is “{max(subs, key=lambda s: s.size).name}”, and "
+                   f"“{busiest.name}” has the highest share of recent papers ({busiest.recent_share:.0%}).")

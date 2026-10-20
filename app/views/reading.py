@@ -55,8 +55,20 @@ def render() -> None:
 
         st.session_state["_tracked_read"] = ws.key
         track("reading_viewed", n_items=len(path))
+    from glossary import term
+
     ui.page_header("Read first", f"What to read for: {ws.query}",
                    "An ordered path from overviews to the newest work, with a reason for each paper.")
+    st.markdown(f"<p class='sg-muted'>Start with a {term('survey')}, then the {term('co-citation')} foundations "
+                "that many papers here build on, then key recent work and the frontier.</p>", unsafe_allow_html=True)
+    with st.expander("How to read a research paper"):
+        st.markdown(
+            "**Three passes.**\n"
+            "1. *Skim (10 minutes):* title, abstract, figures and the conclusion. Decide whether it matters to you.\n"
+            "2. *Main idea (1 hour):* read the introduction, method and results. Skip proofs and details.\n"
+            "3. *In depth (when reproducing):* read everything, check the experiments, try the code.\n\n"
+            "**For each paper, note:** the problem, the method, the data, the results, and the limitations "
+            "the authors admit. Keep the notes in **My project → Notes**.")
     if not path:
         ui.note("<b>No reading path from citations yet.</b> This build has no reference data for these papers, "
                 "so here are the most-cited papers retrieved for your topic instead.")
@@ -99,3 +111,4 @@ def render() -> None:
                           args=(pid, record, "reading_path"))
                 n += 1
     st.session_state.j_read = True
+    ui.next_step("Find open problems in this topic", "gaps", "Problems authors say are still open, with evidence.")

@@ -1,6 +1,8 @@
 """Start — the research journey's entry point: describe a topic, then map it."""
 from __future__ import annotations
 
+import html
+
 import streamlit as st
 
 import ui
@@ -25,6 +27,34 @@ def _choose(text: str) -> None:
     from telemetry import query_props, track
 
     track("topic_started", **query_props(ui.get_config(), text))
+
+
+def _preview() -> None:
+    """What you'll get: a static example of a sub-topic, a reading-path item and a Gap Card."""
+    import json
+    import os
+
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "example_gap.json")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            ex = json.load(fh)
+    except (OSError, ValueError):
+        return
+    with ui.panel("preview"):
+        ui.panel_header("What you'll get", "example")
+        s, r, g = ex["subtopic"], ex["reading_item"], ex["gap"]
+        c1, c2, c3 = st.columns(3, gap="medium")
+        tag = "<span class='sg-example-tag'>Example</span>"
+        c1.markdown(f"{tag}<div class='sg-area-t'>{html.escape(s['name'])}</div>"
+                    f"<div class='sg-subtopic-n'>Sub-topic · {s['size']} papers · {s['recent_share']:.0%} from the "
+                    f"last 12 months</div><p>{html.escape(s['summary'])}</p>", unsafe_allow_html=True)
+        c2.markdown(f"{tag}<div class='sg-area-t'>{html.escape(r['title'])}</div>"
+                    f"<div class='sg-subtopic-n'>Read first · Foundations · {r['year']}</div>"
+                    f"<p>{html.escape(r['reason'])}</p>", unsafe_allow_html=True)
+        c3.markdown(f"{tag}<div class='sg-area-t'>{html.escape(g['title'])}</div>"
+                    f"<div class='sg-subtopic-n'>Open problem · evaluation gap · {g['evidence']} papers of evidence</div>"
+                    f"<p>{html.escape(g['statement'])}</p><div class='sg-caveat'><b>Why this might not be a gap:</b> "
+                    f"{html.escape(g['why_it_might_not_be_a_gap'])}</div>", unsafe_allow_html=True)
 
 
 def render() -> None:
@@ -52,8 +82,12 @@ def render() -> None:
                 ui.goto("topic")
                 st.rerun()
 
+    from views import tour
+
+    tour.render_invite()
     st.markdown("<div class='sg-journey five'>" + "".join(
         f"<div><b>{t}</b><p>{d}</p></div>" for t, d in _STEPS) + "</div>", unsafe_allow_html=True)
+    _preview()
 
     history = st.session_state.get("topic_history", [])
     if history:

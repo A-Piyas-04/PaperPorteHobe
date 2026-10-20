@@ -433,6 +433,26 @@ _CSS = """
   .sg-score-part i { position: absolute; left: 0; top: 0; bottom: 0; background: #e3ecfd; z-index: -1; }
   .sg-evidence { padding: .45rem 0; border-bottom: 1px solid var(--border); font-size: .9375rem; }
   .sg-evidence blockquote { margin: .35rem 0; padding-left: .7rem; border-left: 3px solid #c4d5ee; color: #333b49; }
+  .sg-empty .t { font-size: 1.125rem; font-weight: 800; color: var(--ink); margin-bottom: .3rem; }
+  .sg-empty p { color: #333b49; margin: 0 0 .6rem; }
+  .sg-muted { color: var(--muted); font-size: .9375rem; }
+  .sg-chip.conf-high, .sg-chip.feas-high { background: #e3f4ea; color: #145c3a; }
+  .sg-chip.conf-medium, .sg-chip.feas-medium { background: #fdf3dc; color: #6b4a00; }
+  .sg-chip.conf-low, .sg-chip.feas-low { background: #f1f3f6; color: #333b49; }
+  abbr.sg-term { text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
+  .sg-example-tag { display: inline-block; font-size: .75rem; font-weight: 700; letter-spacing: .04em;
+                    text-transform: uppercase; color: #6b4a00; background: #fdf3dc; border-radius: 6px;
+                    padding: .05rem .4rem; margin-bottom: .3rem; }
+  @media (max-width: 640px) {
+    [data-testid="stHorizontalBlock"] { flex-wrap: wrap !important; }
+    [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] { min-width: 100% !important; }
+    .st-key-topnav [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] { min-width: 0 !important; }
+    .sg-journey-bar { font-size: .8125rem; }
+    .sg-score-bars, .m { flex-wrap: wrap; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .sg-card, .sg-bar, .sg-skel, .sg-splash .bar span { animation: none !important; transition: none !important; }
+  }
   @media (max-width: 700px) {
     .sg-journey, .sg-journey.five { grid-template-columns: 1fr; gap: 12px; }
     .sg-concepts { grid-template-columns: 1fr; }
@@ -805,9 +825,7 @@ def require_workspace():
     """The active workspace, or ``None`` after showing a 'choose a topic first' note."""
     q = str(st.session_state.get("topic_query", "") or "").strip()
     if not q:
-        note("<b>No topic yet.</b> Start by describing what you want to research.")
-        if st.button("Choose a topic", type="primary", key="need_topic"):
-            goto("start")
+        empty_state("No topic yet", "Start by describing what you want to research.", [("Choose a topic", "start")])
         return None
     try:
         return get_workspace(q)
@@ -842,7 +860,12 @@ def eval_allowed() -> bool:
     return bool(admins) and signed_in_email() in admins
 
 
+DEMO_TOPIC_EXAMPLES = ["language models", "federated learning privacy", "motion planning"]
+
+
 def topic_examples() -> list[str]:
+    if demo_mode():
+        return DEMO_TOPIC_EXAMPLES
     cats = get_config()["scope"]["categories"]
     if cats != "all" and any(str(c).startswith("cs.CL") for c in cats):
         return ["hallucination in retrieval-augmented generation", "low-resource machine translation",
@@ -1025,8 +1048,10 @@ def render_top_nav(pages: dict) -> None:
     with st.container(key="topnav"):
         st.markdown("<div class='sg-brand'>ScholarGrid <span class='sg-brand-sub'>From a topic to a "
                     "research question.</span></div>", unsafe_allow_html=True)
+        from glossary import render_list
+
         steps = [k for k in JOURNEY if k in pages]
-        cols = st.columns([1] * len(steps) + [0.8, 0.8], gap="small")
+        cols = st.columns([1] * len(steps) + [0.8, 0.8, 0.8], gap="small")
         for col, key in zip(cols, steps):
             col.page_link(pages[key])
         durable = get_repo() is not None
@@ -1036,7 +1061,10 @@ def render_top_nav(pages: dict) -> None:
                     st.page_link(pages[key])
             st.caption("Follow the steps from Start. These tools give deeper context.")
             _account_controls()
-        with cols[len(steps) + 1]:
+        with cols[len(steps) + 1], st.popover("Key terms", use_container_width=True,
+                                               help="New to research? Plain definitions of common terms."):
+            st.markdown("<b>New to research? Key terms</b>" + render_list(), unsafe_allow_html=True)
+        with cols[len(steps) + 2]:
             tour.header_control()
 
 
@@ -1108,6 +1136,45 @@ def panel_header(title: str, meta: str | None = None) -> None:
 
 def note(text_html: str) -> None:
     st.markdown(f"<div class='sg-note'>{text_html}</div>", unsafe_allow_html=True)
+
+
+def _key(text: str, n: int = 10) -> str:
+    import hashlib as _h
+
+    return _h.sha1(text.encode("utf-8")).hexdigest()[:n]
+
+
+def empty_state(title: str, body: str, actions: Sequence[tuple[str, str]] = ()) -> None:
+    """Consistent empty/error state. actions = [(button label, page key), ...]."""
+    k = _key(title)
+    with panel(f"empty-{k}"):
+        st.markdown(f"<div class='sg-empty'><div class='t'>{html.escape(title)}</div>"
+                    f"<p>{html.escape(body)}</p></div>", unsafe_allow_html=True)
+        if actions:
+            cols = st.columns(max(1, len(actions)))
+            for i, (col, (label, page)) in enumerate(zip(cols, actions)):
+                if col.button(label, key=f"empty_{page}_{k}_{i}", type="primary" if i == 0 else "secondary",
+                              use_container_width=True):
+                    goto(page)
+
+
+def next_step(label: str, page_key: str, hint: str = "", enabled: bool = True) -> None:
+    """Big call-to-action at the bottom of a journey page."""
+    with panel(f"next-{page_key}"):
+        c1, c2 = st.columns([3, 1], vertical_alignment="center")
+        c1.markdown(f"<b>Next:</b> {html.escape(label)}" + (f"<br><span class='sg-muted'>{html.escape(hint)}</span>"
+                    if hint else ""), unsafe_allow_html=True)
+        if c2.button("Continue →", type="primary", key=f"next_{page_key}", use_container_width=True,
+                     disabled=not enabled, help=None if enabled else hint or None):
+            goto(page_key)
+
+
+def chip(text: str, kind: str = "") -> str:
+    return f"<span class='sg-chip {html.escape(kind)}'>{html.escape(text)}</span>"
+
+
+def demo_mode() -> bool:
+    return get_bundle().meta.get("snapshot", {}).get("source") == "synthetic"
 
 
 def stat_tiles(tiles: Sequence[tuple]) -> None:
@@ -1296,8 +1363,8 @@ def gap_card(card: dict, key_prefix: str, *, on_recheck=None, on_save=None, on_p
     typ = str(card.get("type", ""))
     chips = (f"<span class='sg-chip area' title='{html.escape(TYPE_HELP.get(typ, ''))}'>"
              f"{html.escape(TYPE_LABELS.get(typ, typ))}</span>"
-             f"<span class='sg-chip'>Confidence: {html.escape(str(card.get('confidence', 'low')))}</span>"
-             f"<span class='sg-chip'>Feasibility: {html.escape(str(card.get('feasibility', 'medium')))}</span>")
+             + chip(f"{str(card.get('confidence', 'low')).title()} confidence", f"conf-{card.get('confidence', 'low')}")
+             + chip(f"Feasibility: {card.get('feasibility', 'medium')}", f"feas-{card.get('feasibility', 'medium')}"))
     if card.get("beginner_friendly"):
         chips += "<span class='sg-chip cites'>Beginner-friendly</span>"
     if label:

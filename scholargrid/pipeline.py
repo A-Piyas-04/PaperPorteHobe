@@ -227,7 +227,8 @@ def stage_analyze(ctx: Context) -> None:
                 clusters_meta[cid]["growth"] = g
         info.update(reliable=growth["n_reliable"], sufficient=growth["sufficient_history"])
     with stage_timer("sparse", t) as info:
-        sparse_leads = detect_sparse(df, embeddings, coords2d, labels, cfg, clusters_meta)
+        sparse_leads = (detect_sparse(df, embeddings, coords2d, labels, cfg, clusters_meta)
+                        if cfg["sparse"]["enabled"] else [])
         for lead in sparse_leads:
             g = growth["clusters"].get(lead.get("nearest_cluster_id"))
             if g:

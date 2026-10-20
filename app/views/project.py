@@ -28,13 +28,10 @@ def _session_fallback() -> None:
 
 
 def _empty() -> None:
-    ui.page_header("My project", "Nothing saved yet",
-                   "Save papers, open problems and plans; they'll appear here and stay after you close the tab.")
-    c1, c2, _ = st.columns([1, 1, 2])
-    if c1.button("Start with a topic", type="primary", key="proj_start"):
-        ui.goto("start")
-    if c2.button("Search papers", key="proj_search"):
-        ui.goto("home")
+    ui.page_header("My project", "Nothing saved yet")
+    ui.empty_state("Your project is empty",
+                   "Save papers, open problems and plans; they'll appear here and stay after you close the tab.",
+                   [("Start with a topic", "start"), ("Search papers", "home")])
 
 
 def _header(repo, pid: str, acc: Access, info: dict, user: dict | None) -> None:
@@ -311,3 +308,4 @@ def render() -> None:
         _settings_tab(repo, pid, acc, info, user)
     if info["counts"]["gaps"] or info["counts"]["plans"]:
         st.session_state.j_project = True
+    ui.next_step("Explore another topic", "start")

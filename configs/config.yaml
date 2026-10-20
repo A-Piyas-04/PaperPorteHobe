@@ -232,6 +232,7 @@ search:
 # FR-08  Sparse-neighborhood exploration
 # ---------------------------------------------------------------------------
 sparse:
+  enabled: true                  # legacy "investigation leads" (replaced by the Gap Engine); cheap, kept for comparability
   min_corpus_size: 1000          # production: 20000 (sparsity in small samples is noise)
   grid_size: 24
   low_density_percentile: 20
@@ -281,6 +282,7 @@ app:
   max_area_papers: 400           # Map focuses on at most this many papers per area (most-cited first)
   pre_warm: true                 # load the bundle and embedding model at startup
   allow_grow: true               # show the "Grow collection" button on About (turn off for public sites)
+  show_legacy_leads: false       # the old "Leads" page; Open problems replaces it
 
 # ---------------------------------------------------------------------------
 # LLM layer (plan 01): FREE providers only. provider: live | fake (tests) | none (heuristics).

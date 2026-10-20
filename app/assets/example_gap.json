@@ -1,0 +1,21 @@
+{
+  "subtopic": {
+    "name": "Low-rank adapters for LLM fine-tuning",
+    "summary": "Papers that adapt large language models by training small low-rank matrices instead of all weights, to cut memory and cost.",
+    "size": 48,
+    "recent_share": 0.62
+  },
+  "reading_item": {
+    "step": "foundation",
+    "title": "LoRA: Low-Rank Adaptation of Large Language Models",
+    "year": 2021,
+    "reason": "Cited by 31 of the 48 papers here, a shared foundation."
+  },
+  "gap": {
+    "type": "evaluation_gap",
+    "title": "Low-rank adapters are rarely tested outside English",
+    "statement": "In the papers analysed here, low-rank adapter methods are evaluated almost only on English benchmarks; their behaviour on low-resource languages is untested.",
+    "why_it_might_not_be_a_gap": "Multilingual evaluations may exist in papers outside the collection or in appendices.",
+    "evidence": 6
+  }
+}

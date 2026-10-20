@@ -37,6 +37,27 @@ def _recheck(card: dict) -> None:
     st.session_state["_recheck"] = card
 
 
+def _how_to_judge() -> None:
+    from glossary import term
+
+    with st.expander("How to judge a research gap"):
+        st.markdown(
+            f"- **Is it real?** Do several papers mention it? Read the quotes, not just the card. An "
+            f"{term('open problem')} stated by one paper is weaker than one stated by five.\n"
+            f"- **Is it still open?** Check the {term('novelty check')} line, and search the last 6 months yourself.\n"
+            "- **Does it matter?** Who would use the result? Would a reviewer care?\n"
+            f"- **Can you do it?** Is there public data, code for a {term('baseline')}, and enough compute and time?\n"
+            "- **Would a supervisor agree?** Ask: is this known to be hard? Has someone just solved it? Is the scope "
+            "right for me?", unsafe_allow_html=True)
+
+
+def _next() -> None:
+    chosen = bool(ui.saved_gap_ids() or st.session_state.get("plan_gap"))
+    ui.next_step("Turn a problem you like into a starter plan", "plan",
+                 "Use “Make a starter plan” on a card." if not chosen else "Plan the open problem you saved.",
+                 enabled=chosen)
+
+
 def _filters(cards: list[dict], key: str) -> list[dict]:
     types = sorted({c.get("type", "") for c in cards})
     c1, c2, c3, c4, c5 = st.columns([2, 1.1, 1.1, 1.2, 1.1])
@@ -86,10 +107,18 @@ def render() -> None:
     ui.journey_bar("gaps")
     bundle = ui.get_bundle()
     q = str(st.session_state.get("topic_query", "") or "").strip()
-    if not q:
-        ui.note("<b>No topic yet.</b> Choose a topic to see its open problems, or browse them by area below.")
-        if st.button("Choose a topic", type="primary", key="gaps_need_topic"):
-            ui.goto("start")
+    if st.session_state.get("gaps_area_mode") or not q:
+        ui.page_header("Open problems", "Open problems by research area",
+                       "Cards built offline for each area of the collection. Read the evidence and treat every "
+                       "card as a lead to verify.")
+        if q:
+            if st.button(f"← Back to your topic: {q}", type="tertiary", key="gaps_back_topic"):
+                st.session_state["gaps_area_mode"] = False
+                st.rerun()
+        else:
+            ui.note("<b>No topic yet.</b> Choose a topic to see its own open problems, or browse them by area below.")
+            if st.button("Choose a topic", type="primary", key="gaps_need_topic"):
+                ui.goto("start")
         _by_area(bundle)
         return
     ws = ui.require_workspace()
@@ -99,6 +128,7 @@ def render() -> None:
     ui.page_header("Open problems", f"Open problems in: {ws.query}",
                    "Each card is built from what authors wrote and what the papers contain. Read the evidence, "
                    "and treat every card as a lead to verify.")
+    _how_to_judge()
     recheck = st.session_state.pop("_recheck", None)
     if recheck is not None:
         from telemetry import track
@@ -145,6 +175,7 @@ def render() -> None:
                 track("gaps_generated", n_cards=len(data.get("cards", [])), seconds=round(time.time() - t0, 1),
                       requests_used=(data.get("stats") or {}).get("requests_used", 0))
                 st.rerun()
+        _next()
         return
 
     stats = data.get("stats") or {}
@@ -178,3 +209,4 @@ def render() -> None:
                f"{stats.get('rejected_by_llm', 0)} rejected by the writer · {stats.get('already_addressed', 0)} "
                "already addressed by recent papers.")
     st.session_state.j_gaps = True
+    _next()

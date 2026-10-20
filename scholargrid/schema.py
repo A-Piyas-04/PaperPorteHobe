@@ -197,6 +197,7 @@ class Search(_Section):
 
 
 class Sparse(_Section):
+    enabled: bool = True
     min_corpus_size: int = 1000
     grid_size: int = 24
     low_density_percentile: float = 20
@@ -235,6 +236,7 @@ class App(_Section):
     max_area_papers: int = Field(default=400, ge=10)
     pre_warm: bool = True
     allow_grow: bool = True
+    show_legacy_leads: bool = False      # the old "Investigation leads" page (replaced by Open problems)
 
 
 LlmMode = Literal["live", "fake", "none"]          # live = call the configured providers

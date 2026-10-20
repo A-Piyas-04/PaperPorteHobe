@@ -184,9 +184,15 @@ def test_project_page_without_persistence(tmp_path, monkeypatch):
         from views import project
         project.render()
     """), encoding="utf-8")
-    at = AppTest.from_file(str(script), default_timeout=180).run()
-    assert not at.exception, at.exception
-    assert any("session only" in m.value for m in at.markdown)
+    import streamlit as st
+
+    try:
+        at = AppTest.from_file(str(script), default_timeout=180).run()
+        assert not at.exception, at.exception
+        assert any("session only" in m.value for m in at.markdown)
+    finally:                 # caches are process-wide: don't leak the persistence-off config to later tests
+        st.cache_resource.clear()
+        st.cache_data.clear()
 
 
 def test_citations_ready_thresholds():

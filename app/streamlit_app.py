@@ -63,9 +63,10 @@ def _build_pages() -> dict:
         "explore": st.Page(explore.render, title="Map", icon=":material/hub:", url_path="explore"),
         "areas": st.Page(areas.render, title="All areas", icon=":material/category:", url_path="areas"),
         "trends": st.Page(trends.render, title="Trends", icon=":material/trending_up:", url_path="trends"),
-        "leads": st.Page(leads.render, title="Leads (legacy)", icon=":material/lightbulb:", url_path="leads"),
         "about": st.Page(about.render, title="About", icon=":material/info:", url_path="about"),
     }
+    if ui.get_config()["app"]["show_legacy_leads"]:
+        pages["leads"] = st.Page(leads.render, title="Leads (legacy)", icon=":material/lightbulb:", url_path="leads")
     if ui.eval_allowed():
         from views import admin, evaluate
 

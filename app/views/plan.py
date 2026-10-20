@@ -137,6 +137,14 @@ def render() -> None:
     ui.page_header("Plan", "Your starter research plan",
                    "A realistic first project for this open problem, grounded in the papers behind it.")
     _summary(gap)
+    with st.expander("What makes a good first project"):
+        st.markdown(
+            "- **Small and concrete.** One question you can answer in the time you have.\n"
+            "- **Start by reproducing a baseline.** It teaches you the code, the data and the evaluation, and "
+            "gives you a number to beat.\n"
+            "- **One clear change.** Change one thing and measure it; resist building a whole new system.\n"
+            "- **A defined evaluation.** Decide the dataset and metric before you start.\n"
+            "- **A minimum viable result** you could write up even if the idea doesn't work.")
     with st.form("plan-inputs"):
         options = list(pc["weeks_options"])
         default = pc["default_weeks"] if pc["default_weeks"] in options else options[len(options) // 2]
@@ -195,3 +203,5 @@ def render() -> None:
             ui.note(f"<b>Couldn't save.</b> {html.escape(str(exc))}")
     ui.project_notices()
     st.session_state.j_plan = True
+    ui.next_step("Save it to your project and share it with a supervisor", "project",
+                 "Use “Save plan to project” above, then open My project.")

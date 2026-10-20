@@ -18,36 +18,58 @@ import streamlit as st
 import ui
 
 # ---------------------------------------------------------------------------
-# The walkthrough. Four chapters following the app's own 01-02-03 journey, with
-# the optional depth tools sitting between "understand" and "leave with it".
+# The walkthrough follows the research journey (Start → Topic → Read first →
+# Open problems → Plan → My project), then the optional depth tools.
 # ---------------------------------------------------------------------------
 STEPS: list[dict] = [
     {
-        "page": "home",
-        "chapter": "Find your starting point",
-        "title": "Start with a question",
-        "body": "Describe what you want to understand — a topic, a method, or a problem. "
-                "ScholarGrid ranks real papers against your words. It does not write an "
-                "answer for you, so what you get back is a reading list you can check.",
-        "action": "Type a question into the search box, or pick one of the examples.",
+        "page": "start",
+        "chapter": "Find your topic",
+        "title": "Start with a topic",
+        "body": "Describe what you want to research — a topic, a problem, or a method. ScholarGrid "
+                "maps it using real papers; it does not write an answer for you.",
+        "action": "Type a topic, or pick one of the examples, then choose “Explore this topic”.",
     },
     {
-        "page": "home",
-        "chapter": "Find your starting point",
-        "title": "Read the results",
-        "body": "Exact matches contain your words. Related papers are close in meaning but "
-                "may use different terms. Each card shows authors, research area, date and "
-                "citations, so you can judge a paper before you open it.",
-        "action": "Open “Filters and sorting” to narrow by date, category or citations.",
+        "page": "topic",
+        "chapter": "Find your topic",
+        "title": "See its sub-topics",
+        "body": "The papers on your topic are grouped into sub-topics with plain-language summaries, "
+                "key concepts and their most common methods and datasets. Activity is based on the "
+                "papers retrieved, not a growth estimate.",
+        "action": "Open a sub-topic that looks interesting.",
     },
     {
-        "page": "home",
-        "chapter": "Find your starting point",
-        "title": "Save as you go",
-        "body": "Keep anything worth reading. “Save to reading list” stores a paper for this "
-                "session, and “More like this” searches for work similar to it — useful when "
-                "one good paper is a better query than your original words.",
-        "action": "Save one paper, then carry on reading.",
+        "page": "reading",
+        "chapter": "Learn the area",
+        "title": "Read in order",
+        "body": "Start with an overview, then the foundations many papers here cite (often older than "
+                "the collection), then key recent work and the frontier. Each paper says why it is there.",
+        "action": "Save two or three papers, or export the path.",
+    },
+    {
+        "page": "gaps",
+        "chapter": "Find a question",
+        "title": "Open problems, with evidence",
+        "body": "Each card is built from what authors wrote: quotes you can check, a novelty check "
+                "against recent papers, and “why this might not be a gap”. Treat every card as a lead.",
+        "action": "Read a card's evidence, then save one you like.",
+    },
+    {
+        "page": "plan",
+        "chapter": "Find a question",
+        "title": "Make a starter plan",
+        "body": "Turn one open problem into a realistic first project for your time, goal and compute, "
+                "grounded in the papers behind it.",
+        "action": "Fill in “About you” and create a plan.",
+    },
+    {
+        "page": "project",
+        "chapter": "Keep it",
+        "title": "Your project",
+        "body": "Saved papers, open problems, plans and notes stay here after you close the tab. "
+                "Bookmark the link, or export everything as JSON.",
+        "action": "Change a paper's status or add a note.",
     },
     {
         "page": "explore",
@@ -60,57 +82,20 @@ STEPS: list[dict] = [
         "action": "Click a bubble to open that area's papers.",
     },
     {
-        "page": "explore",
-        "chapter": "Understand the context",
-        "title": "Follow the connections",
-        "body": "Inside an area every node is a paper. Click one to read its abstract and related "
-                "work in the side panel; your choice stays selected until you pick another. "
-                "Hovering only previews a title. Overview and Fit take you back out.",
-        "action": "Click a paper, then try “Focus connections”. Prefer plain text? Switch to List.",
-    },
-    {
-        "page": "areas",
-        "chapter": "Go deeper when you need to",
-        "title": "Browse research areas",
-        "body": "Areas are groups of papers with similar titles and abstracts, named after their "
-                "keywords. Open one to see its representative papers and how active it has been "
-                "month by month.",
-        "action": "Filter by a keyword, then open an area that looks relevant.",
-    },
-    {
         "page": "trends",
         "chapter": "Go deeper when you need to",
-        "title": "See where research is moving",
-        "body": "Growth compares recent publishing against an earlier period. A number only "
-                "appears when the data supports it — otherwise the page says so and shows plain "
-                "activity instead. Every figure carries its window and interval.",
-        "action": "Compare a few areas, and read the window and interval under each number.",
-    },
-    {
-        "page": "leads",
-        "chapter": "Go deeper when you need to",
-        "title": "Treat leads as questions",
-        "body": "Leads are quiet spots sitting next to active areas. They can hint at an "
-                "under-explored direction, but just as often they reflect what was collected or "
-                "how the map was drawn. A lead is a question to check, never proof of a gap.",
-        "action": "Open a lead and read the papers around it before trusting it.",
-    },
-    {
-        "page": "library",
-        "chapter": "Leave with something",
-        "title": "Export your reading list",
-        "body": "Everything you saved lives here. Download it as BibTeX for a reference manager, "
-                "or CSV for a spreadsheet. The list is kept for this session only, so export it "
-                "before you close the tab.",
-        "action": "Download your list — or go back and save a few more papers first.",
+        "title": "Where to look",
+        "body": "Areas placed by how crowded they are and whether they are reliably growing, sized by "
+                "their open problems, with plain advice for each kind of area.",
+        "action": "Hover an area, or open the problems of one from the table.",
     },
 ]
 
 TOTAL = len(STEPS)
 
 _FALLBACK_TITLES = {
-    "home": "Search papers", "explore": "Map", "areas": "All areas",
-    "trends": "Trends", "leads": "Leads", "library": "Reading list",
+    "start": "Start", "topic": "Topic", "reading": "Read first", "gaps": "Open problems", "plan": "Plan",
+    "project": "My project", "home": "Search papers", "explore": "Map", "areas": "All areas", "trends": "Trends",
 }
 
 
@@ -247,9 +232,9 @@ def _complete() -> None:
         st.markdown(
             _head("Complete")
             + "<div class='sg-tour-title'>That’s the whole workflow</div>"
-            + "<p class='sg-tour-body'>Search for an interest, read the papers around it on the "
-              "map, and leave with an exported reading list. You can reopen this tour at any "
-              "time from <b>Guide</b> in the header.</p>",
+            + "<p class='sg-tour-body'>Pick a topic, read in order, choose an open problem backed by "
+              "evidence, and leave with a starter plan saved in your project. You can reopen this "
+              "tour at any time from <b>Guide</b> in the header.</p>",
             unsafe_allow_html=True)
         c1, c2, _ = st.columns([1.4, 1.3, 3])
         if c1.button("Start exploring", key="tour_finish", type="primary",
@@ -311,8 +296,8 @@ def render_invite() -> None:
         st.markdown(
             _head("First time here?")
             + "<div class='sg-tour-title'>Take the guided tour</div>"
-            + f"<p class='sg-tour-body'>A {TOTAL}-step walkthrough of the whole workflow, from a "
-              "first search to an exported reading list. You can skip it at any point, and "
+            + f"<p class='sg-tour-body'>A {TOTAL}-step walkthrough of the whole journey, from a "
+              "topic to a starter research plan. You can skip it at any point, and "
               "reopen it later from <b>Guide</b> in the header.</p>",
             unsafe_allow_html=True)
         c1, c2, _ = st.columns([1.4, 1.1, 2.5])

@@ -7,6 +7,7 @@ the corpus is too short, the page says so and shows activity by paper count.
 """
 from __future__ import annotations
 
+import numpy as np
 import plotly.graph_objects as go
 import streamlit as st
 
@@ -17,13 +18,87 @@ def render() -> None:
     bundle = ui.get_bundle()
     ready = ui.growth_ready(bundle)
 
-    ui.page_header("Trends", "Where research is moving",
-                   "Which areas are publishing the most, and which are speeding up.")
+    ui.page_header("Trends", "Where to look",
+                   "Areas placed by how crowded they are and whether they are growing, sized by open problems.")
+    look, details = st.tabs(["Where to look", "Growth details"])
+    with look:
+        _opportunity(bundle)
+    with details:
+        if ready:
+            _growth(bundle)
+        else:
+            _activity(bundle)
 
-    if ready:
-        _growth(bundle)
-    else:
-        _activity(bundle)
+
+def _open_area_gaps(cid: int) -> None:
+    st.session_state["gaps_area"] = str(cid)
+    st.session_state["gaps_area_mode"] = True
+    st.session_state["_trends_goto"] = "gaps"
+
+
+def _opportunity(bundle) -> None:
+    from scholargrid.opportunity import QUADRANTS, opportunity_table
+
+    if st.session_state.pop("_trends_goto", None) == "gaps":
+        ui.goto("gaps")
+    t = opportunity_table(bundle)
+    if t.empty:
+        ui.empty_state("No areas yet", "This release has no research areas to compare.", [("Start a topic", "start")])
+        return
+    with ui.panel("opportunity"):
+        ui.panel_header("Crowdedness × growth", f"{len(t)} areas")
+        reliable = t[t["reliable"]]
+        unreliable = t[~t["reliable"]]
+        fig = go.Figure()
+        if len(reliable):
+            fig.add_trace(go.Scatter(
+                x=reliable["crowdedness"], y=reliable["growth"], mode="markers", name="Reliable growth signal",
+                marker=dict(size=8 + 4 * np.sqrt(reliable["open_problems"] + 1), color=ui.ACCENT, opacity=.8),
+                text=reliable["name"],
+                customdata=np.stack([reliable["recent_papers"], reliable["open_problems"],
+                                     [f"{c[0]:.2f}–{c[1]:.2f}" if c else "—" for c in reliable["growth_ci"]]], axis=-1),
+                hovertemplate="%{text}<br>%{customdata[0]} papers in the last 12 months<br>growth %{y:.2f}× "
+                              "(CI %{customdata[2]})<br>%{customdata[1]} open problems<extra></extra>"))
+        if len(unreliable):
+            fig.add_trace(go.Scatter(
+                x=unreliable["crowdedness"], y=[1.0] * len(unreliable), mode="markers", name="No reliable growth signal",
+                marker=dict(size=8 + 4 * np.sqrt(unreliable["open_problems"] + 1), color="#a9b4c6",
+                            symbol="circle-open", line=dict(width=2)),
+                text=unreliable["name"], customdata=np.stack([unreliable["recent_papers"],
+                                                              unreliable["open_problems"]], axis=-1),
+                hovertemplate="%{text}<br>%{customdata[0]} papers in the last 12 months<br>no reliable growth signal"
+                              "<br>%{customdata[1]} open problems<extra></extra>"))
+        fig.add_vline(x=0.5, line_dash="dot", line_color="#8a93a3")
+        fig.add_hline(y=1.0, line_dash="dot", line_color="#8a93a3")
+        ys = t["growth"].dropna()
+        top_y = float(max(1.3, ys.max() if len(ys) else 1.3))
+        bot_y = float(min(0.7, ys.min() if len(ys) else 0.7))
+        for x, y, label in ((0.02, top_y, "Emerging"), (0.98, top_y, "Hot & competitive"),
+                            (0.02, bot_y, "Niche"), (0.98, bot_y, "Mature")):
+            fig.add_annotation(x=x, y=y, text=label, showarrow=False, xanchor="left" if x < .5 else "right",
+                               font=dict(color="#566070", size=13))
+        ui.apply_chart_style(fig, height=460)
+        fig.update_layout(xaxis=dict(title="Crowdedness (share of areas with fewer recent papers)", range=[0, 1.02],
+                                     gridcolor="#eef0f3"),
+                          yaxis=dict(title="Growth vs. CS average (reliable areas only)", gridcolor="#eef0f3"),
+                          legend=dict(orientation="h", y=-0.2))
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        counts = t["quadrant"].value_counts().to_dict()
+        st.caption("Chart summary: " + "; ".join(f"{counts.get(q, 0)} areas are {q.lower()}" for q in QUADRANTS)
+                   + f". {int(t['reliable'].sum())} of {len(t)} areas have a reliable growth signal; the others "
+                   "are drawn on the 1.0 line as open circles. Larger markers have more open problems.")
+        for q, advice in QUADRANTS.items():
+            st.markdown(f"**{q}.** {advice}")
+    with ui.panel("opportunity-table"):
+        ui.panel_header("Areas by open problems")
+        for r in t.sort_values(["open_problems", "recent_papers"], ascending=False).head(25).itertuples():
+            c1, c2 = st.columns([4, 1.3], vertical_alignment="center")
+            growth = (f"growth {r.growth:.2f}×" if r.reliable else "no reliable growth signal")
+            c1.markdown(f"**{r.name}** · {r.quadrant}<br><span class='sg-muted'>{r.size:,} papers, "
+                        f"{r.recent_papers:,} in the last 12 months · {growth} · {r.open_problems} open problems</span>",
+                        unsafe_allow_html=True)
+            c2.button("Open problems in this area", key=f"opp_{r.area_id}", on_click=_open_area_gaps,
+                      args=(r.area_id,), disabled=r.open_problems == 0, use_container_width=True)
 
 
 def _activity(bundle) -> None:
