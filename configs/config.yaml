@@ -301,7 +301,7 @@ app:
 # paper text and anonymous queries; users are warned before sending their own text.
 # ---------------------------------------------------------------------------
 llm:
-  provider: none
+  provider: live
   providers:
     gemini:     {kind: gemini, api_key_env: GEMINI_API_KEY, quota_tz: America/Los_Angeles}
     groq:       {kind: openai_compat, enabled: false, base_url: "https://api.groq.com/openai/v1",
@@ -315,7 +315,7 @@ llm:
     "gemini:gemini-3.6-flash":      {rpm: 5, rpd: 100}
     "groq:openai/gpt-oss-120b":     {rpm: 30, rpd: 1000, tpm: 8000}
   tasks:
-    extract:        {route: ["gemini:gemini-3.5-flash-lite"], thinking: minimal, max_output_tokens: 16384, pack_size: 4, expected_output_tokens: 1200}
+    extract:        {route: ["gemini:gemini-3.5-flash-lite", "gemini:gemini-3.6-flash", "gemini:gemini-3.8-flash"], thinking: minimal, max_output_tokens: 16384, pack_size: 6, expected_output_tokens: 1200}
     label:          {route: ["gemini:gemini-3.5-flash-lite"], thinking: minimal, max_output_tokens: 12288, pack_size: 6, expected_output_tokens: 400}
     reason:         {route: ["gemini:gemini-3.5-flash-lite"], thinking: minimal, max_output_tokens: 4096, pack_size: 6, expected_output_tokens: 200}
     judge:          {route: ["gemini:gemini-3.8-flash", "gemini:gemini-3.5-flash-lite"], thinking: low, max_output_tokens: 12288, pack_size: 5, expected_output_tokens: 400}

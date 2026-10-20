@@ -27,6 +27,41 @@ from .schema import ConfigError, validate_config
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_CONFIG = os.path.join(REPO_ROOT, "configs", "config.yaml")
+_ENV_FILE = os.path.join(REPO_ROOT, ".env")
+_env_loaded = False
+
+
+def load_dotenv(path: str = _ENV_FILE) -> int:
+    """Put ``KEY=value`` lines from ``.env`` into the environment, once.
+
+    Secrets are read straight from ``os.environ`` all over the codebase, and a developer
+    running Streamlit from an IDE (or anything at all on Windows) has no shell in which to
+    ``source .env``. Real environment variables always win, so CI and containers are
+    unaffected. Returns the number of names set.
+    """
+    global _env_loaded
+    if _env_loaded or not os.path.exists(path):
+        return 0
+    _env_loaded = True
+    n = 0
+    try:
+        with open(path, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, value = line.partition("=")
+                key = key.strip()
+                value = value.strip().strip('"').strip("'")
+                if key and value and key not in os.environ:
+                    os.environ[key] = value
+                    n += 1
+    except OSError:
+        return n
+    return n
+
+
+load_dotenv()
 
 PROFILE_SIZES: Dict[str, Optional[int]] = {"dev": 5000, "standard": 50000, "full": None}
 
