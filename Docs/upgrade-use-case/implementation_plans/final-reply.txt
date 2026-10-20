@@ -1,0 +1,45 @@
+Written for: Cursor, as the same sequential prompts, now on free LLM providers only.
+
+I've switched the plan series to $0 API spend: Gemini's free tier is the main provider, and Groq, OpenRouter's free models, a local Ollama (or Grok, if you have credits) can be added as fallbacks. The files are the same 12 in /home/amt/Public/implementation_plans/; give them to Cursor in the same order as before.
+
+What changed:
+
+Plan 01 is rewritten around one gateway for all providers:
+Each task tries an ordered list of free models; the first one with quota left wins.
+A quota tracker enforces your per-minute and per-day limits and remembers them between runs.
+When daily quota runs out, it moves to the next model in the list or stops cleanly.
+Several papers go into one request, which saves daily quota.
+New commands: python -m scholargrid.llm quota shows quota left today, and python -m scholargrid.llm estimate shows how many days a job will take.
+Model choices: bulk work (extraction, labels) uses gemini-3.5-flash-lite. Work that needs judgment (gap cards, plans, judges) uses gemini-3.8-flash, falling back to Flash-Lite.
+Extraction (plan 03) resumes across days. When quota runs out mid-run, the remaining papers get the no-AI version now and are upgraded on a later run, most-cited papers first. A new daily GitHub workflow starts just after Google's daily reset (midnight Pacific).
+Fewer requests per topic: sub-topic labels, reading reasons and novelty checks are grouped into shared requests. One topic page costs about 3 requests instead of about 13. Generating open problems for a topic costs about 16.
+Plan 11 limits the app by requests per day (shared and per visitor), not dollars. It makes "use your own key" the main way to scale: visitors paste their own free Gemini key, which takes a minute in AI Studio and uses their quota. It also adds secret-redaction rules for Gemini, Groq and OpenRouter keys.
+Plans 00, 04–07 and 09 have smaller updates to match.
+Things you should know:
+
+Your Gemini Pro subscription probably doesn't give you API quota. Google bills the API separately from its consumer subscriptions, and the API free tier only covers the Flash and Flash-Lite models; Gemini 4 and the Pro preview models aren't free.
+The free tier has no batch processing.
+I couldn't confirm the free daily limits. Sources disagree, and some report big cuts in 2025–2026. Copy your real numbers from AI Studio's rate-limit page into llm.limits; the defaults in the plans are guesses.
+Expect slow bulk work. Extracting a few thousand papers can take days or weeks on free quota. Narrowing scope to one sub-field (e.g. cs.CL) keeps it practical. Adding Groq or a local Ollama to the model list helps.
+Privacy: Google may use free-tier content to improve its products. The plans only send public paper text and anonymous queries, and warn users before sending their own text.
+Grok has no reliable free API tier, so it's an optional route only.
+I built on Gemini's generate_content call, which Google says is still fully supported. The plan tells Cursor to adapt if the installed SDK names a parameter differently (e.g. thinking_level).
+The code is still unrun. Every Python block in the plans parses, except two intentional fragments meant to be pasted into an existing dict.
+Sources:
+
+Gemini API pricing
+Gemini models
+Gemini rate limits
+Gemini structured output
+Gemini thinking
+Gemini Interactions API
+Migrate to Interactions
+Gemini libraries
+Gemini free-tier changes (agentdeals)
+Gemini free tier guide (yingtu)
+Groq free tier (benchlm)
+Groq community: free tier limits
+OpenRouter free models (benchlm)
+OpenRouter rate limits (TrueFoundry)
+xAI API free plan (CostBench)
+xAI pricing (eesel)
