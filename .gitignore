@@ -27,6 +27,9 @@ data/fulltext/
 data/extract/
 data/workspaces/
 data/app.db
+data/app.db-shm
+data/app.db-wal
+data/app.db-journal
 *.duckdb
 *.duckdb.wal
 

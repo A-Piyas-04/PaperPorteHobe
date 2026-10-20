@@ -137,13 +137,32 @@ _CSS = """
   }
   .sg-brand { font-size: 1.375rem; font-weight: 800; color: var(--ink);
               white-space: nowrap; letter-spacing: -.01em; }
+  /* The nav row sizes every item to its own label; nothing is clipped. */
+  .st-key-topnav-row { flex-wrap: wrap; gap: .15rem .25rem; row-gap: .35rem; }
+  .st-key-topnav-row > [data-testid="stElementContainer"],
+  .st-key-topnav-row > [data-testid="stPopover"] { flex: 0 0 auto; width: auto !important; }
+  .st-key-topnav-row [data-testid="stElementContainer"]:has(.sg-nav-spacer) {
+    flex: 1 1 1.5rem; min-width: 1.5rem;
+  }
   .st-key-topnav [data-testid="stPageLink"] a {
-    padding: .5rem .9rem; border-radius: 10px; justify-content: center;
+    padding: .5rem .85rem; border-radius: 10px; justify-content: center;
     transition: background .18s ease, color .18s ease;
   }
   .st-key-topnav [data-testid="stPageLink"] a p {
     font-size: 1rem !important; font-weight: 650; color: var(--muted);
+    white-space: nowrap; overflow: visible; text-overflow: clip;
   }
+  /* The utility menus (More / Key terms / Guide) read as one set: same height,
+     radius and type as the page links, outlined so they stay secondary. */
+  .st-key-topnav-row [data-testid="stPopoverButton"] {
+    padding: .5rem .85rem; border-radius: 10px; min-height: 0; height: auto;
+    border: 1px solid var(--border); background: #fff;
+  }
+  .st-key-topnav-row [data-testid="stPopoverButton"] p {
+    font-size: 1rem !important; font-weight: 650; color: var(--muted); white-space: nowrap;
+  }
+  .st-key-topnav-row [data-testid="stPopoverButton"]:hover { background: #e8ecf5; }
+  .st-key-topnav-row [data-testid="stPopoverButton"]:hover p { color: var(--ink); }
   .st-key-topnav [data-testid="stPageLink"] a:hover { background: #e8ecf5; }
   .st-key-topnav [data-testid="stPageLink"] a:hover p { color: var(--ink); }
   .st-key-topnav [data-testid="stPageLink"] a[aria-current="page"],
@@ -446,7 +465,7 @@ _CSS = """
   @media (max-width: 640px) {
     [data-testid="stHorizontalBlock"] { flex-wrap: wrap !important; }
     [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] { min-width: 100% !important; }
-    .st-key-topnav [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] { min-width: 0 !important; }
+    .st-key-topnav-row > [data-testid="stElementContainer"] { min-width: 0 !important; }
     .sg-journey-bar { font-size: .8125rem; }
     .sg-score-bars, .m { flex-wrap: wrap; }
   }
@@ -462,11 +481,12 @@ _CSS = """
     .sg-tour-dots i { width: 14px; }
     div[class*="st-key-panel-"] { padding: 1.25rem; }
     .st-key-topnav { position: static; }
-    .st-key-topnav [data-testid="stHorizontalBlock"] { flex-wrap: nowrap !important; gap: .25rem !important; }
-    .st-key-topnav [data-testid="stColumn"] { min-width: 0 !important; width: auto !important; flex: 1 1 0 !important; }
-    .st-key-topnav [data-testid="stPageLink"] a { padding: .5rem .2rem; }
-    .st-key-topnav [data-testid="stPageLink"] a p { font-size: .8rem !important; }
-    .st-key-topnav [data-testid="stIconMaterial"] { display: none; }
+    .st-key-topnav-row { gap: .2rem !important; row-gap: .3rem !important; }
+    .st-key-topnav-row [data-testid="stElementContainer"]:has(.sg-nav-spacer) { display: none; }
+    .st-key-topnav [data-testid="stPageLink"] a { padding: .45rem .55rem; }
+    .st-key-topnav [data-testid="stPageLink"] a p,
+    .st-key-topnav-row [data-testid="stPopoverButton"] p { font-size: .875rem !important; }
+    .st-key-topnav-row [data-testid="stPopoverButton"] { padding: .45rem .55rem; }
   }
 </style>
 """
@@ -1197,24 +1217,27 @@ def render_top_nav(pages: dict) -> None:
         from glossary import render_list
 
         steps = [k for k in JOURNEY if k in pages]
-        cols = st.columns([1] * len(steps) + [0.8, 0.8, 0.8], gap="small")
-        for col, key in zip(cols, steps):
-            col.page_link(pages[key])
-        durable = get_repo() is not None
-        with cols[len(steps)], st.popover("More", use_container_width=True):
-            for key in MORE:
-                if key in pages and not (key == "library" and durable):
-                    st.page_link(pages[key])
-            st.caption("Follow the steps from Start. These tools give deeper context.")
-            _account_controls()
-            cfg = get_config()
-            if cfg["llm"]["allow_byok"] and cfg["llm"]["provider"] == "live":
-                with st.expander("Your AI key"):
-                    byok_settings("byok_nav")
-        with cols[len(steps) + 1], st.popover("Key terms", use_container_width=True,
-                                               help="New to research? Plain definitions of common terms."):
-            st.markdown("<b>New to research? Key terms</b>" + render_list(), unsafe_allow_html=True)
-        with cols[len(steps) + 2]:
+        # A content-width flex row, not equal columns: every label keeps its full
+        # text instead of being clipped to a fixed cell. The spacer pushes the
+        # utility menus to the right edge.
+        with st.container(key="topnav-row", horizontal=True, vertical_alignment="center"):
+            for key in steps:
+                st.page_link(pages[key])
+            st.markdown("<span class='sg-nav-spacer'></span>", unsafe_allow_html=True)
+            durable = get_repo() is not None
+            with st.popover("More", width="content"):
+                for key in MORE:
+                    if key in pages and not (key == "library" and durable):
+                        st.page_link(pages[key])
+                st.caption("Follow the steps from Start. These tools give deeper context.")
+                _account_controls()
+                cfg = get_config()
+                if cfg["llm"]["allow_byok"] and cfg["llm"]["provider"] == "live":
+                    with st.expander("Your AI key"):
+                        byok_settings("byok_nav")
+            with st.popover("Key terms", width="content",
+                            help="New to research? Plain definitions of common terms."):
+                st.markdown("<b>New to research? Key terms</b>" + render_list(), unsafe_allow_html=True)
             tour.header_control()
 
 

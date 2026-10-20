@@ -256,7 +256,7 @@ def header_control() -> None:
     idx = int(st.session_state.tour_step)
     here = step_for_page(st.session_state.get("_page_key"))
 
-    with st.popover("Guide", use_container_width=True):
+    with st.popover("Guide", width="content"):
         if active:
             st.caption("Guided tour · finished" if idx >= TOTAL
                        else f"Guided tour · step {idx + 1} of {TOTAL}")
