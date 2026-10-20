@@ -128,7 +128,6 @@ def _render_plan(doc) -> None:
 def render() -> None:
     from scholargrid.plan import PlanDocument, generate_plan
 
-    ui.journey_bar("plan")
     gap = _choose_gap()
     if gap is None:
         return
@@ -209,6 +208,5 @@ def render() -> None:
         except ValueError as exc:
             ui.note(f"<b>Couldn't save.</b> {html.escape(str(exc))}")
     ui.project_notices()
-    st.session_state.j_plan = True
     ui.next_step("Save it to your project and share it with a supervisor", "project",
                  "Use “Save plan to project” above, then open My project.")

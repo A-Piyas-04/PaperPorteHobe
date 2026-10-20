@@ -104,7 +104,6 @@ def render() -> None:
 
     if st.session_state.pop("_goto", None) == "plan":
         ui.goto("plan")
-    ui.journey_bar("gaps")
     bundle = ui.get_bundle()
     q = str(st.session_state.get("topic_query", "") or "").strip()
     if st.session_state.get("gaps_area_mode") or not q:
@@ -223,5 +222,4 @@ def render() -> None:
     st.caption(f"{stats.get('candidates', 0)} candidates checked · {stats.get('judged_out', 0)} judged implausible · "
                f"{stats.get('rejected_by_llm', 0)} rejected by the writer · {stats.get('already_addressed', 0)} "
                "already addressed by recent papers.")
-    st.session_state.j_gaps = True
     _next()

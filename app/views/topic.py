@@ -96,7 +96,6 @@ def _detail(ws, s) -> None:
 
 
 def render() -> None:
-    ui.journey_bar("topic")
     ws = ui.require_workspace()
     if ws is None:
         return
@@ -140,7 +139,6 @@ def render() -> None:
     if unclustered:
         with st.expander(f"Other papers found online ({len(unclustered)})"):
             _papers(ws, [p.paper_id for p in unclustered[:30]], key="online")
-    st.session_state.j_topic = True
     ui.next_step("See what to read first", "reading", "An ordered reading path for this topic.")
 
 

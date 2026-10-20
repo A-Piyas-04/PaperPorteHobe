@@ -273,7 +273,6 @@ def render() -> None:
 
     if st.session_state.pop("_proj_goto", None) == "plan":
         ui.goto("plan")
-    ui.journey_bar("project")
     repo = ui.get_repo()
     if repo is None:
         _session_fallback()
@@ -310,6 +309,4 @@ def render() -> None:
         _notes_tab(repo, pid, acc)
     with tabs[4]:
         _settings_tab(repo, pid, acc, info, user)
-    if info["counts"]["gaps"] or info["counts"]["plans"]:
-        st.session_state.j_project = True
     ui.next_step("Explore another topic", "start")

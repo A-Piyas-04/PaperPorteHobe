@@ -72,7 +72,6 @@ def test_topic_and_reading_flow(app_config, tmp_path):
     at.run()
     assert not at.exception, at.exception
     assert any("sub-topics" in m.value for m in at.markdown)
-    assert at.session_state["j_topic"]
     at.button(key=next(b.key for b in at.button if str(b.key).startswith("ws_open_"))).click().run()
     assert not at.exception, at.exception
     assert any("Representative papers" in m.value for m in at.markdown)
@@ -252,7 +251,6 @@ def test_gaps_page_with_cached_cards(app_config, tmp_path):
     assert not at.exception, at.exception
     text = " ".join(m.value for m in at.markdown)
     assert "Why this might not be a gap" in text and data["cards"][0]["title"][:30] in text
-    assert at.session_state["j_gaps"]
 
 
 def test_gaps_page_by_area_without_topic(app_config, tmp_path):
@@ -272,7 +270,6 @@ def test_plan_page_generates(app_config, tmp_path):
     assert not at.exception, at.exception
     labels = [t.label for t in at.tabs]
     assert "Timeline" in labels and "Export" in labels
-    assert at.session_state["j_plan"]
 
 
 def test_evaluate_page_is_blind_and_saves(app_config, tmp_path, monkeypatch):
@@ -322,13 +319,14 @@ def test_trends_has_both_tabs_and_caption(app_config, tmp_path):
 @pytest.mark.parametrize("page,nxt", [("topic", "See what to read first"),
                                       ("reading", "Find open problems in this topic"),
                                       ("gaps", "Turn a problem you like into a starter plan")])
-def test_journey_pages_show_bar_and_next_step(app_config, tmp_path, page, nxt):
+def test_journey_pages_show_next_step(app_config, tmp_path, page, nxt):
     at = AppTest.from_file(_script(tmp_path, page), default_timeout=180)
     at.session_state["topic_query"] = "language models"
     at.run()
     assert not at.exception, at.exception
     text = " ".join(m.value for m in at.markdown)
-    assert "sg-journey-bar" in text and nxt in text
+    assert nxt in text
+    assert "sg-journey-bar" not in text   # the step checklist was removed; the top nav is the only progress cue
 
 
 def test_about_sections_and_glossary(app_config, tmp_path):

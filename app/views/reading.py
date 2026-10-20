@@ -45,7 +45,6 @@ def _fallback(ws) -> list[dict]:
 
 
 def render() -> None:
-    ui.journey_bar("reading")
     ws = ui.require_workspace()
     if ws is None:
         return
@@ -110,5 +109,4 @@ def render() -> None:
                 st.button(ui.paper_save_label(pid in saved), key=f"read_save_{n}_{pid}", on_click=ui.toggle_paper,
                           args=(pid, record, "reading_path"))
                 n += 1
-    st.session_state.j_read = True
     ui.next_step("Find open problems in this topic", "gaps", "Problems authors say are still open, with evidence.")

@@ -17,7 +17,6 @@ Session keys shared across the research journey:
 | topic_query   | start/topic  | the active topic text                                |
 | ws_key        | topic        | cache key of the active workspace                    |
 | ws_selected   | topic        | selected sub-topic id                                |
-| j_*           | each page    | journey completion flags (j_topic, j_read, j_gaps, j_plan, j_project) |
 | topic_history | start        | recent topics this session                           |
 """
 from __future__ import annotations
@@ -431,12 +430,6 @@ _CSS = """
   .sg-card:hover { transform: none; box-shadow: none; }
   .st-key-panel-hero { padding-top: 2.5rem; }
   .sg-journey.five { grid-template-columns: repeat(5, 1fr); gap: 18px; }
-  .sg-journey-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; margin: 0 0 1rem;
-                    font-size: .875rem; color: var(--muted); }
-  .sg-journey-bar i { font-style: normal; color: #b6bcc7; }
-  .sg-jstep { padding: .15rem .55rem; border-radius: 999px; border: 1px solid transparent; }
-  .sg-jstep.done { color: #1a7f55; }
-  .sg-jstep.now { color: var(--ink); font-weight: 700; border-color: #c4d5ee; background: #f3f6fd; }
   .sg-subtopic-n { font-size: .8125rem; color: var(--muted); margin: .25rem 0 .35rem; }
   .sg-concepts { display: grid; grid-template-columns: minmax(8rem, 1fr) 3fr; gap: .35rem 1rem; margin: .6rem 0; }
   .sg-concepts dt { font-weight: 700; }
@@ -466,7 +459,6 @@ _CSS = """
     [data-testid="stHorizontalBlock"] { flex-wrap: wrap !important; }
     [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] { min-width: 100% !important; }
     .st-key-topnav-row > [data-testid="stElementContainer"] { min-width: 0 !important; }
-    .sg-journey-bar { font-size: .8125rem; }
     .sg-score-bars, .m { flex-wrap: wrap; }
   }
   @media (prefers-reduced-motion: reduce) {
@@ -1203,11 +1195,6 @@ def fmt_date(d) -> str:
 # ---------------------------------------------------------------------------
 JOURNEY = ["start", "topic", "reading", "gaps", "plan", "project"]
 MORE = ["home", "explore", "areas", "trends", "library", "leads", "about", "evaluate", "admin"]
-_JOURNEY_STEPS = [("topic", "Topic", "j_topic"), ("reading", "Read first", "j_read"),
-                  ("gaps", "Open problems", "j_gaps"), ("plan", "Plan", "j_plan"),
-                  ("project", "Project", "j_project")]
-
-
 def render_top_nav(pages: dict) -> None:
     from views import tour
 
@@ -1261,22 +1248,6 @@ def _account_controls() -> None:
             st.login(provider)
         else:
             st.login()
-
-
-def journey_bar(current: str) -> None:
-    """Thin breadcrumb: 1 Topic · 2 Read first · 3 Open problems · 4 Plan · 5 Project."""
-    pages = st.session_state.get("_pages") or {}
-    parts = []
-    for n, (key, label, flag) in enumerate(_JOURNEY_STEPS, start=1):
-        if pages and key not in pages:
-            continue
-        done = bool(st.session_state.get(flag))
-        cls = "now" if key == current else ("done" if done else "")
-        mark = "✓ " if done and key != current else f"{n} "
-        aria = " aria-current='step'" if key == current else ""
-        parts.append(f"<span class='sg-jstep {cls}'{aria}>{mark}{html.escape(label)}</span>")
-    st.markdown("<nav class='sg-journey-bar' aria-label='Research journey'>" + "<i>·</i>".join(parts)
-                + "</nav>", unsafe_allow_html=True)
 
 
 def goto(key: str) -> None:
