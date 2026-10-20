@@ -131,12 +131,19 @@ def render() -> None:
     _how_to_judge()
     recheck = st.session_state.pop("_recheck", None)
     if recheck is not None:
+        from limits import Busy, allow, heavy_slot, limit_message
         from telemetry import track
 
-        with st.spinner("Checking recent papers…"):
-            new = recheck_novelty(recheck, ws, bundle, ui.get_searcher(ui.bundle_version()), cfg, ui.get_llm())
-        st.session_state.pop("_gaps_data", None)
-        track("novelty_checked", gap_id=recheck["id"], status=(new.get("novelty") or {}).get("status"))
+        if not allow("novelty_check"):
+            ui.note(html.escape(limit_message("novelty_check")))
+        else:
+            try:
+                with heavy_slot(), st.spinner("Checking recent papers…"):
+                    new = recheck_novelty(recheck, ws, bundle, ui.get_searcher(ui.bundle_version()), cfg, ui.get_llm())
+                st.session_state.pop("_gaps_data", None)
+                track("novelty_checked", gap_id=recheck["id"], status=(new.get("novelty") or {}).get("status"))
+            except Busy as exc:
+                ui.note(html.escape(str(exc)))
 
     data = st.session_state.get("_gaps_data")
     if not data or data.get("ws_key") != ws.key:
@@ -158,19 +165,27 @@ def render() -> None:
             if st.button("Find open problems for this topic (about 1–2 minutes)", type="primary", key="gaps_go"):
                 import time
 
+                from limits import Busy, allow, heavy_slot, limit_message
                 from telemetry import track
 
+                if not allow("gaps_generate"):
+                    ui.note(html.escape(limit_message("gaps_generate")))
+                    return
                 t0 = time.time()
-                with st.status("Finding open problems…", expanded=True) as status:
-                    bar = st.progress(0.0)
+                try:
+                    with heavy_slot(), st.status("Finding open problems…", expanded=True) as status:
+                        bar = st.progress(0.0)
 
-                    def progress(msg: str, frac: float) -> None:
-                        status.update(label=msg)
-                        bar.progress(min(1.0, max(0.0, float(frac))))
+                        def progress(msg: str, frac: float) -> None:
+                            status.update(label=msg)
+                            bar.progress(min(1.0, max(0.0, float(frac))))
 
-                    data = gaps_for_workspace(ws, bundle, ui.get_searcher(ui.bundle_version()), cfg, ui.get_llm(),
-                                              progress=progress)
-                    status.update(label="Done", state="complete", expanded=False)
+                        data = gaps_for_workspace(ws, bundle, ui.get_searcher(ui.bundle_version()), cfg,
+                                                  ui.get_llm(), progress=progress)
+                        status.update(label="Done", state="complete", expanded=False)
+                except Busy as exc:
+                    ui.note(html.escape(str(exc)))
+                    return
                 st.session_state["_gaps_data"] = data
                 track("gaps_generated", n_cards=len(data.get("cards", [])), seconds=round(time.time() - t0, 1),
                       requests_used=(data.get("stats") or {}).get("requests_used", 0))

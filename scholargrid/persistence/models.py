@@ -125,6 +125,15 @@ class Event(Base):
     props: Mapped[dict] = mapped_column(JsonType, default=dict)
 
 
+class LlmUsageDaily(Base):
+    __tablename__ = "llm_usage_daily"
+    __table_args__ = (UniqueConstraint("day", "scope"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    day: Mapped[str] = mapped_column(String(10), index=True)        # YYYY-MM-DD in America/Los_Angeles (Gemini reset)
+    scope: Mapped[str] = mapped_column(String(80), index=True)      # "global" or "session:<sid>"
+    requests: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class ProjectNote(Base):
     __tablename__ = "project_notes"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

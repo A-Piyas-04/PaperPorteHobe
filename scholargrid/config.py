@@ -35,6 +35,10 @@ _ENV_OVERRIDES = {
     "SCHOLARGRID_ENV": ("environment",),
     "SCHOLARGRID_RELEASE": ("release", "pin"),
     "SCHOLARGRID_ALLOW_GROW": ("app", "allow_grow"),
+    "SCHOLARGRID_LLM_PROVIDER": ("llm", "provider"),                       # kill switch: live | fake | none
+    "SCHOLARGRID_DAILY_LLM_REQUESTS": ("llm", "budget", "online_daily_requests"),
+    "SCHOLARGRID_OFFLINE_MAX_REQUESTS": ("llm", "budget", "offline_max_requests"),
+    "SCHOLARGRID_PERSISTENCE_AUTH": ("persistence", "auth"),
 }
 
 

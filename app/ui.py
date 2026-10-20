@@ -591,14 +591,124 @@ def max_query_chars() -> int:
 
 @st.cache_resource(show_spinner=False)
 def _llm_client(config_hash: str):
+    """The shared client; for the live server key it carries the online free-quota guard."""
     from scholargrid.llm import get_llm as _get
+    from scholargrid.llm.guard import install_guard
 
-    return _get(get_config())
+    cfg = get_config()
+    llm = _get(cfg)
+    guard = install_guard(llm, cfg, get_repo())
+    st.session_state["_guard_installed"] = guard is not None
+    return llm
 
 
 def get_llm():
-    """The LLM client every page passes into library calls (never call scholargrid.llm.get_llm in views)."""
-    return _llm_client(get_config().config_hash())
+    """BYOK router for this session if the visitor added their own key, else the shared, guarded one.
+    Every page passes this into library calls (never call scholargrid.llm.get_llm in views)."""
+    return st.session_state.get("_byok_llm") or _llm_client(get_config().config_hash())
+
+
+def online_guard_state() -> dict | None:
+    """Shared-allowance state for the current session (None without a live server key or a database)."""
+    from scholargrid.llm.guard import OnlineGuard
+
+    cfg, repo = get_config(), get_repo()
+    if repo is None or cfg["llm"]["provider"] != "live" or st.session_state.get("_byok_llm") is not None:
+        return None
+    try:
+        return OnlineGuard(cfg, repo).state()
+    except Exception:
+        return None
+
+
+def _reset_time_text() -> str:
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+
+    cfg = get_config()
+    provider_tz = ZoneInfo((cfg["llm"]["providers"].get("gemini") or {}).get("quota_tz", "America/Los_Angeles"))
+    now = datetime.now(provider_tz)
+    reset = (now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)).timestamp()
+    tzname = None
+    try:
+        tzname = getattr(st.context, "timezone", None)
+    except Exception:
+        tzname = None
+    try:
+        zone = ZoneInfo(tzname) if tzname else ZoneInfo("UTC")
+    except Exception:
+        zone = ZoneInfo("UTC")
+    return datetime.fromtimestamp(reset, zone).strftime("%H:%M %Z")
+
+
+def ai_notices() -> None:
+    """The kill-switch banner, and one friendly note per session when the shared allowance is used up."""
+    cfg = get_config()
+    if cfg["llm"]["provider"] == "none" and cfg.is_production:
+        note("<b>AI features are temporarily off; results use simpler methods.</b>")
+        return
+    state = online_guard_state()
+    if state and state["exhausted"] and not st.session_state.get("_quota_note_shown"):
+        st.session_state["_quota_note_shown"] = True
+        note("<b>Today's free AI allowance is used up, so you're seeing simpler results.</b> To continue with full "
+             "features, add your own free Gemini API key (takes about a minute; see <b>More → Your AI key</b>), "
+             f"or come back after the daily reset (around {html.escape(_reset_time_text())}).")
+
+
+def _validate_key(key: str):
+    """Build a per-session router for the visitor's own key and test it with one tiny request."""
+    import hashlib as _h
+
+    from pydantic import BaseModel
+
+    from scholargrid.llm import LLMError, build_router
+    from scholargrid.llm.prompts import render
+
+    class _Check(BaseModel):
+        ok: bool
+        echo: str
+
+    cfg = get_config()
+    udir = os.path.join(cfg.abspath(cfg["llm"]["usage_dir"]), "byok", _h.sha256(key.encode()).hexdigest()[:12])
+    router = build_router(cfg, api_keys={"gemini": key}, usage_dir=udir)
+    if "gemini" not in router.backends:
+        raise LLMError("the key could not be used")
+    route = next((r for r in cfg["llm"]["tasks"]["check"]["route"] if r.startswith("gemini:")), None)
+    system, user = render("check", word="scholargrid")
+    res = router._run("check", "check", _Check, system, user, only_route=route)
+    if not res.value.ok:
+        raise LLMError("unexpected answer from the provider")
+    return router
+
+
+def byok_settings(key_prefix: str = "byok") -> None:
+    """'Your AI key' settings: paste your own free Gemini key for this browser session only."""
+    cfg = get_config()
+    if not cfg["llm"]["allow_byok"] or cfg["llm"]["provider"] != "live":
+        st.caption("Using your own AI key is not available on this site.")
+        return
+    if st.session_state.get("_byok_llm") is not None:
+        st.success("Your own Gemini key is active for this browser session.")
+        if st.button("Remove key", key=f"{key_prefix}_remove"):
+            st.session_state.pop("_byok_llm", None)
+            st.rerun()
+        return
+    st.markdown("1. Open [Google AI Studio](https://aistudio.google.com/app/apikey) and sign in.\n"
+                "2. Click **Get API key** and create a key.\n3. Paste it here.")
+    key = st.text_input("Your Gemini API key", type="password", key=f"{key_prefix}_input",
+                        help="Used only for your requests in this browser session. Never stored or logged. Requests "
+                             "count against your free quota. Free-tier content may be used by Google to improve its "
+                             "products.")
+    if st.button("Use my key", key=f"{key_prefix}_use", disabled=not key.strip()):
+        from scholargrid.llm import LLMError
+
+        try:
+            with st.spinner("Checking the key (one tiny request)…"):
+                st.session_state["_byok_llm"] = _validate_key(key.strip())
+            st.session_state.pop(f"{key_prefix}_input", None)
+            st.rerun()
+        except LLMError as exc:
+            st.error(f"That key didn't work ({type(exc).__name__}). Check it in AI Studio and try again.")
 
 
 @st.cache_resource(show_spinner=False)
@@ -803,6 +913,10 @@ def project_notices() -> None:
                 st.rerun()
 
 
+class RateLimitedAction(RuntimeError):
+    """A per-session limit was reached for an expensive action."""
+
+
 def get_workspace(query: str):
     """The topic workspace for ``query``: session cache, then disk cache, else build it with progress."""
     from scholargrid.workspace import build_workspace, load_cached, workspace_key
@@ -819,8 +933,12 @@ def get_workspace(query: str):
     if ws is None:
         import time as _time
 
+        from limits import allow, heavy_slot, limit_message
+
+        if not allow("workspace_build"):
+            raise RateLimitedAction(limit_message("workspace_build"))
         t0 = _time.time()
-        with st.status("Mapping your topic…", expanded=True) as status:
+        with heavy_slot(), st.status("Mapping your topic…", expanded=True) as status:
             bar = st.progress(0.0)
 
             def progress(msg: str, frac: float) -> None:
@@ -849,8 +967,13 @@ def require_workspace():
     if not q:
         empty_state("No topic yet", "Start by describing what you want to research.", [("Choose a topic", "start")])
         return None
+    from limits import Busy
+
     try:
         return get_workspace(q)
+    except (RateLimitedAction, Busy) as exc:
+        note(html.escape(str(exc)))
+        return None
     except Exception as exc:
         from scholargrid.monitoring import capture_exception
 
@@ -1084,6 +1207,10 @@ def render_top_nav(pages: dict) -> None:
                     st.page_link(pages[key])
             st.caption("Follow the steps from Start. These tools give deeper context.")
             _account_controls()
+            cfg = get_config()
+            if cfg["llm"]["allow_byok"] and cfg["llm"]["provider"] == "live":
+                with st.expander("Your AI key"):
+                    byok_settings("byok_nav")
         with cols[len(steps) + 1], st.popover("Key terms", use_container_width=True,
                                                help="New to research? Plain definitions of common terms."):
             st.markdown("<b>New to research? Key terms</b>" + render_list(), unsafe_allow_html=True)

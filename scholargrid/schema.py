@@ -237,6 +237,11 @@ class App(_Section):
     pre_warm: bool = True
     allow_grow: bool = True
     show_legacy_leads: bool = False      # the old "Investigation leads" page (replaced by Open problems)
+    limits: Dict[str, List[int]] = Field(default_factory=lambda: {   # action -> [max count, window seconds]
+        "workspace_build": [10, 3600], "gaps_generate": [4, 3600], "plan_generate": [4, 3600],
+        "novelty_check": [15, 3600], "project_create": [10, 3600]})
+    heavy_slots: int = Field(default=2, ge=1, le=16)       # expensive builds at once per process
+    contact_email: str = ""                                # shown on About for corrections and takedowns
 
 
 LlmMode = Literal["live", "fake", "none"]          # live = call the configured providers

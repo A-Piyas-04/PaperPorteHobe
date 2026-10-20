@@ -127,3 +127,27 @@ Completed locally:
 - TypeScript/Vite production build succeeds and the committed `frontend/dist` is rebuilt so the normal Streamlit launch uses the restored map without a dev server. Ruff and mypy pass. `npm audit` reports **zero vulnerabilities**.
 
 Use the commands in [Local development](next-instructions.md). These checks establish the tested local behaviour; they are not a claim of multi-user load capacity, large-corpus rendering performance, or usability outcomes for real researchers. Scalability beyond this release is bounded by design (level-of-detail + per-area caps), not demonstrated by visual inspection.
+
+## 2026-10-20 — Research-starter journey (upgrade plans 05–10)
+
+What changed:
+
+- The app opens on **Start** and follows one journey: Topic → Read first → Open problems → Plan →
+  My project, with a journey bar at the top of each step and a "Next:" call to action at the bottom.
+  Search, Map, All areas, Trends and About moved under **More**.
+- **Trends** opens on "Where to look": areas by crowdedness × reliable growth, sized by open problems,
+  with plain advice per quadrant and a text summary of the chart. The old growth tables are kept
+  under "Growth details".
+- The old **Leads** page is off by default (`app.show_legacy_leads`); About explains why it was
+  replaced.
+- A **Key terms** popover in the top bar and inline `<abbr>` tooltips define research jargon;
+  short explainers on Read first, Open problems and Plan.
+- Consistent empty states; Gap Card chips carry words, not only colour; a 640 px layout collapses
+  multi-column rows; reduced motion also covers the new cards.
+- The guided tour follows the new journey (8 steps) and starts from Start.
+- Projects (papers, open problems, plans, notes) are durable; the Reading list redirects to My project.
+- "Load demo data" builds the whole journey offline (synthetic papers, fake AI, no network).
+
+Still to do: the plan-10 walkthrough with one person who has never seen the app (going from "I'm
+interested in X" to a saved plan without help). Record the three biggest stumbling points and the
+fixes here when it has been run.

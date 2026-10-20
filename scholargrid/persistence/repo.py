@@ -15,7 +15,7 @@ from sqlalchemy import func, select
 
 from ..config import Config
 from .db import session_factory
-from .models import Event, Project, ProjectGap, ProjectNote, ProjectPaper, ProjectPlan, Rating, User
+from .models import Event, LlmUsageDaily, Project, ProjectGap, ProjectNote, ProjectPaper, ProjectPlan, Rating, User
 
 PAPER_STATUSES = ("to_read", "reading", "read", "key")
 GAP_STATUSES = ("considering", "shortlisted", "chosen", "rejected")
@@ -480,6 +480,35 @@ class ProjectRepo:
             for r in rows:
                 s.delete(r)
             return len(rows)
+
+    # -- online free-quota counters (plan 11) ---------------------------------------------------
+    @staticmethod
+    def quota_day() -> str:
+        """Today in the Gemini reset timezone (midnight Pacific)."""
+        from zoneinfo import ZoneInfo
+
+        return datetime.now(ZoneInfo("America/Los_Angeles")).strftime("%Y-%m-%d")
+
+    def requests_today(self, scope: str) -> int:
+        with self.Session() as s:
+            n = s.scalar(select(LlmUsageDaily.requests).where(LlmUsageDaily.day == self.quota_day(),
+                                                              LlmUsageDaily.scope == scope))
+            return int(n or 0)
+
+    def add_request(self, scopes: List[str]) -> None:
+        """Atomic per-(day, scope) increment (INSERT ... ON CONFLICT DO UPDATE on SQLite and Postgres)."""
+        day = self.quota_day()
+        with self.Session.begin() as s:
+            dialect = s.get_bind().dialect.name
+            if dialect == "postgresql":
+                from sqlalchemy.dialects.postgresql import insert as _insert
+            else:
+                from sqlalchemy.dialects.sqlite import insert as _insert  # type: ignore[assignment]
+            for scope in scopes:
+                stmt = _insert(LlmUsageDaily).values(day=day, scope=str(scope)[:80], requests=1)
+                stmt = stmt.on_conflict_do_update(index_elements=["day", "scope"],
+                                                  set_={"requests": LlmUsageDaily.requests + 1})
+                s.execute(stmt)
 
     # -- maintenance ----------------------------------------------------------------------
     def purge_anonymous(self, older_than_days: int) -> int:

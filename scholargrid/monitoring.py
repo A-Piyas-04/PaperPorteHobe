@@ -1,16 +1,25 @@
 """Optional error tracking (Sentry) for the pipeline and the app.
 
 Enabled only when ``SENTRY_DSN`` is set and ``sentry-sdk`` is installed; a
-no-op otherwise. No personal data is sent (``send_default_pii=False``).
+no-op otherwise. No personal data is sent (``send_default_pii=False``), and every
+event is scrubbed of API keys, project tokens and database passwords first.
 """
 from __future__ import annotations
 
 import os
+from typing import Any
 
+from .redact import scrub as _scrub
 from .utils import get_logger
 
 log = get_logger("monitoring")
 _initialised = False
+
+
+def _before_send(event: Any, hint: Any) -> Any:
+    import json
+
+    return json.loads(_scrub(json.dumps(event, default=str)))
 
 
 def init_error_tracking(component: str, release: str | None = None) -> bool:
@@ -24,7 +33,8 @@ def init_error_tracking(component: str, release: str | None = None) -> bool:
         log.warning("SENTRY_DSN is set but sentry-sdk is not installed; error tracking disabled.")
         return False
     sentry_sdk.init(dsn=dsn, release=release, environment=os.environ.get("SCHOLARGRID_ENV", "development"),
-                    send_default_pii=False, traces_sample_rate=float(os.environ.get("SENTRY_TRACES", "0")))
+                    send_default_pii=False, traces_sample_rate=float(os.environ.get("SENTRY_TRACES", "0")),
+                    before_send=_before_send, before_breadcrumb=lambda crumb, hint: _before_send(crumb, hint))
     sentry_sdk.set_tag("component", component)
     _initialised = True
     log.info("Sentry error tracking enabled for %s.", component)

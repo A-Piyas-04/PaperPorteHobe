@@ -283,6 +283,14 @@ app:
   pre_warm: true                 # load the bundle and embedding model at startup
   allow_grow: true               # show the "Grow collection" button on About (turn off for public sites)
   show_legacy_leads: false       # the old "Leads" page; Open problems replaces it
+  limits:                        # per browser session: [max actions, window seconds]; 3x with the visitor's own key
+    workspace_build: [10, 3600]
+    gaps_generate: [4, 3600]
+    plan_generate: [4, 3600]
+    novelty_check: [15, 3600]
+    project_create: [10, 3600]
+  heavy_slots: 2                 # expensive builds running at once per app process
+  contact_email: ""              # shown on About for corrections and takedowns
 
 # ---------------------------------------------------------------------------
 # LLM layer (plan 01): FREE providers only. provider: live | fake (tests) | none (heuristics).

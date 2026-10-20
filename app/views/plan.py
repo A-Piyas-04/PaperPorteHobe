@@ -170,19 +170,26 @@ def render() -> None:
                 ws = None
         import time
 
+        from limits import Busy, allow, heavy_slot, limit_message
         from telemetry import track
 
-        t0 = time.time()
-        with st.status("Writing your plan… (about a minute)", expanded=False) as status:
-            bundle = ui.get_bundle()
-            doc = generate_plan(gap, bundle, cfg, ui.get_llm(), bundle.embedder, weeks=inputs["weeks"],
-                                background=inputs["background"], compute_access=compute, goal=goal, workspace=ws,
-                                attempt=attempt)
-            status.update(label="Done", state="complete")
-        track("plan_generated", mode=doc.generated_by.get("mode"), seconds=round(time.time() - t0, 1),
-              weeks=inputs["weeks"])
-        plans.setdefault(gap["id"], {})[key] = doc.model_dump(mode="json")
-        st.session_state["plan_last"] = key
+        if not allow("plan_generate"):
+            ui.note(html.escape(limit_message("plan_generate")))
+        else:
+            t0 = time.time()
+            try:
+                with heavy_slot(), st.status("Writing your plan… (about a minute)", expanded=False) as status:
+                    bundle = ui.get_bundle()
+                    doc = generate_plan(gap, bundle, cfg, ui.get_llm(), bundle.embedder, weeks=inputs["weeks"],
+                                        background=inputs["background"], compute_access=compute, goal=goal,
+                                        workspace=ws, attempt=attempt)
+                    status.update(label="Done", state="complete")
+                track("plan_generated", mode=doc.generated_by.get("mode"), seconds=round(time.time() - t0, 1),
+                      weeks=inputs["weeks"])
+                plans.setdefault(gap["id"], {})[key] = doc.model_dump(mode="json")
+                st.session_state["plan_last"] = key
+            except Busy as exc:
+                ui.note(html.escape(str(exc)))
     stored = (plans.get(gap["id"]) or {}).get(key) or (plans.get(gap["id"]) or {}).get(
         st.session_state.get("plan_last", ""))
     if not stored:

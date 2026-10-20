@@ -34,8 +34,11 @@ class JsonFormatter(logging.Formatter):
 def _root_logger() -> logging.Logger:
     root = logging.getLogger(_ROOT)
     if not root.handlers:
+        from .redact import SecretFilter
+
         handler = logging.StreamHandler()
         handler.setFormatter(logging.Formatter(_LOG_FORMAT, datefmt="%H:%M:%S"))
+        handler.addFilter(SecretFilter())          # never log API keys, project tokens or DB passwords
         root.addHandler(handler)
         root.setLevel(logging.INFO)
         root.propagate = False

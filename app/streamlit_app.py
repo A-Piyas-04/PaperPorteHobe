@@ -108,6 +108,10 @@ def main() -> None:
         _friendly_error(exc)
         return
 
+    from scholargrid.llm.context import current_session
+    from telemetry import session_id
+
+    current_session.set(session_id())        # the online free-quota guard counts per browser session
     pages = _build_pages()
     st.session_state["_pages"] = pages
     if not st.session_state.get("_opened"):
@@ -128,6 +132,7 @@ def main() -> None:
 
     ui.render_top_nav(pages)
     ui.global_notices(ui.get_bundle())
+    ui.ai_notices()
     if st.session_state.get("_page_key") != "project":
         ui.project_notices()
     tour.render_dock()
