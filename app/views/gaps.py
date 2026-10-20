@@ -37,6 +37,24 @@ def _recheck(card: dict) -> None:
     st.session_state["_recheck"] = card
 
 
+def _extraction_missing(bundle) -> bool:
+    """True when the served bundle carries no extracted problems at all.
+
+    Every detector reads ``bundle.problems``; without it the engine can only ever return
+    zero candidates, which is a build problem and not a property of the topic.
+    """
+    probs = getattr(bundle, "problems", None)
+    return probs is None or not len(probs)
+
+
+def _no_extraction_note() -> None:
+    ui.note("<b>This bundle has no extracted open problems yet.</b> Gap finding reads author-stated "
+            "limitations that are pulled out of paper full text by the extraction stage, and that stage "
+            "has not run for the papers you are looking at — so no topic can produce cards yet. "
+            "Run <code>python scripts/warm_topics.py</code> to do it for your saved topics, then restart "
+            "the app.")
+
+
 def _how_to_judge() -> None:
     from glossary import term
 
@@ -161,6 +179,8 @@ def render() -> None:
             ui.panel_header("Open problems for this topic")
             st.write("We look for problems several authors say are still open, untested combinations, narrow "
                      "evaluations, conflicting results and missing connections, then check recent papers.")
+            if _extraction_missing(bundle):
+                _no_extraction_note()
             if st.button("Find open problems for this topic (about 1–2 minutes)", type="primary", key="gaps_go"):
                 import time
 
@@ -206,8 +226,15 @@ def render() -> None:
         if only:
             cards = [c for c in cards if str((c.get("scope") or {}).get("id", "")).endswith(f":{sub}")] or cards
     if not cards:
-        ui.note("This topic has few author-stated limitations in the analysed papers; try a broader topic or "
-                "another sub-topic.")
+        if _extraction_missing(bundle):
+            _no_extraction_note()
+        elif not stats.get("candidates"):
+            ui.note("No candidate gaps were found in the extracted problems for this topic. The papers here "
+                    "may not be covered by the extraction stage yet — run "
+                    "<code>python scripts/warm_topics.py</code> to extend it to your saved topics.")
+        else:
+            ui.note("This topic has few author-stated limitations in the analysed papers; try a broader topic or "
+                    "another sub-topic.")
     else:
         _render_cards(_filters(cards, "ws"), "ws")
     area_cards = data.get("area_cards") or []
