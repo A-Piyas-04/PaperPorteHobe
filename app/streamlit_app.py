@@ -53,6 +53,15 @@ def _build_pages() -> dict:
     }
 
 
+def _current_key(pages: dict, nav) -> str | None:
+    """Map the running page back to its short key (``home``, ``explore``, …)."""
+    path = getattr(nav, "url_path", None)
+    for key, page in pages.items():
+        if getattr(page, "url_path", None) == path:
+            return key
+    return None
+
+
 def _friendly_error(exc: Exception) -> None:
     capture_exception(exc)
     ui.note("<b>Something went wrong on this page.</b> The error has been logged. "
@@ -83,8 +92,14 @@ def main() -> None:
         st.session_state["q"] = st.session_state["q"]
 
     nav = st.navigation(list(pages.values()), position="hidden")
+    # Which page is showing, as a short key — the guided tour binds steps to these.
+    st.session_state["_page_key"] = _current_key(pages, nav)
+
+    from views import tour
+
     ui.render_top_nav(pages)
     ui.global_notices(ui.get_bundle())
+    tour.render_dock()
     try:
         nav.run()
     except Exception as exc:

@@ -135,6 +135,84 @@ _CSS = """
   .st-key-topnav [data-testid="stPageLink"] a[aria-current="page"] p,
   .st-key-topnav [data-testid="stPageLink"] a[aria-current="true"] p { color: var(--accent); }
 
+  /* ---- Guided tour -----------------------------------------------------
+     Deliberately off-theme: the app is light panels + blue accent, so the tour
+     is a dark console with a warm accent. It should never read as page content.
+  ---------------------------------------------------------------------- */
+  .st-key-tour-dock, .st-key-tour-invite {
+    position: relative; overflow: hidden;
+    background:
+      radial-gradient(circle, rgba(255,255,255,.045) 1px, transparent 1.2px) 0 0/18px 18px,
+      linear-gradient(145deg, #161f33 0%, #1d2740 60%, #202b46 100%);
+    border: 1px solid rgba(255,255,255,.10);
+    border-radius: 16px;
+    padding: 1.5rem 1.75rem 1.3rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 18px 44px rgba(10,16,30,.38), inset 0 1px 0 rgba(255,255,255,.06);
+    animation: sgRise .45s cubic-bezier(.2,.7,.2,1) both;
+  }
+  /* Warm rail across the top: the tour's signature. */
+  .st-key-tour-dock::before, .st-key-tour-invite::before {
+    content: ""; position: absolute; inset: 0 0 auto 0; height: 3px;
+    background: linear-gradient(90deg, #ffb020, #ff7d4d 55%, transparent);
+  }
+  .sg-tour-head { display: flex; align-items: center; gap: .7rem;
+                  flex-wrap: wrap; margin-bottom: .2rem; }
+  .sg-tour-tag { background: #ffb020; color: #241803; font-size: .6875rem;
+                 font-weight: 900; letter-spacing: .12em; text-transform: uppercase;
+                 padding: .25rem .65rem; border-radius: 999px; }
+  .sg-tour-count { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+                   color: #8fa3c4; font-size: .78rem; font-weight: 700;
+                   letter-spacing: .12em; text-transform: uppercase; }
+  .sg-tour-title { color: #f4f7fd; font-size: 1.4rem; font-weight: 800;
+                   line-height: 1.3; letter-spacing: -.01em; margin: .55rem 0 .45rem; }
+  .sg-tour-body { color: #a9b9d4; font-size: 1rem; line-height: 1.7; margin: 0 0 .9rem; }
+  .st-key-tour-dock b, .st-key-tour-invite b { color: #e9f0fb; }
+  .sg-tour-do { background: rgba(255,176,32,.10); border-left: 3px solid #ffb020;
+                border-radius: 0 10px 10px 0; padding: .65rem .95rem;
+                color: #ffd79a; font-size: .9375rem; font-weight: 650; margin-bottom: 1rem; }
+  /* The tour's own step rail (Streamlit's progress bar would look like the app). */
+  .sg-tour-dots { display: flex; align-items: center; gap: 6px; margin: 0 0 1.1rem; }
+  .sg-tour-dots i { display: block; width: 22px; height: 4px; border-radius: 2px;
+                    background: rgba(255,255,255,.14); }
+  .sg-tour-dots i.done { background: rgba(255,176,32,.55); }
+  .sg-tour-dots i.now { background: #ffb020; box-shadow: 0 0 0 3px rgba(255,176,32,.18); }
+  /* Buttons inside the tour follow the tour, not the site. */
+  .st-key-tour-dock [data-testid="stBaseButton-secondary"],
+  .st-key-tour-invite [data-testid="stBaseButton-secondary"] {
+    background: transparent !important; border: 1px solid rgba(255,255,255,.20) !important;
+  }
+  .st-key-tour-dock [data-testid="stBaseButton-secondary"] p,
+  .st-key-tour-invite [data-testid="stBaseButton-secondary"] p {
+    color: #cfdcf0 !important; font-weight: 650 !important;
+  }
+  .st-key-tour-dock [data-testid="stBaseButton-secondary"]:hover,
+  .st-key-tour-invite [data-testid="stBaseButton-secondary"]:hover {
+    background: rgba(255,176,32,.12) !important; border-color: #ffb020 !important;
+    transform: none !important;
+  }
+  .st-key-tour-dock [data-testid="stBaseButton-secondary"]:hover p,
+  .st-key-tour-invite [data-testid="stBaseButton-secondary"]:hover p { color: #ffd79a !important; }
+  .st-key-tour-dock [data-testid="stBaseButton-secondary"]:disabled p { color: #5d6e8c !important; }
+  .st-key-tour-dock [data-testid="stBaseButton-primary"],
+  .st-key-tour-invite [data-testid="stBaseButton-primary"],
+  .st-key-tour-dock [data-testid="stButton"] button[kind="primary"],
+  .st-key-tour-invite [data-testid="stButton"] button[kind="primary"] {
+    background: #ffb020 !important; border: 1px solid #ffb020 !important;
+  }
+  .st-key-tour-dock [data-testid="stBaseButton-primary"] p,
+  .st-key-tour-invite [data-testid="stBaseButton-primary"] p,
+  .st-key-tour-dock [data-testid="stButton"] button[kind="primary"] p,
+  .st-key-tour-invite [data-testid="stButton"] button[kind="primary"] p {
+    color: #241803 !important; font-weight: 800 !important;
+  }
+  .st-key-tour-dock [data-testid="stBaseButton-primary"]:hover,
+  .st-key-tour-invite [data-testid="stBaseButton-primary"]:hover,
+  .st-key-tour-dock [data-testid="stButton"] button[kind="primary"]:hover,
+  .st-key-tour-invite [data-testid="stButton"] button[kind="primary"]:hover {
+    background: #ffc247 !important; border-color: #ffc247 !important;
+  }
+
   /* ---- Section panels: white blocks on the grey page ----------------- */
   div[class*="st-key-panel-"] {
     background: #fff; border: 1px solid var(--border); border-radius: 16px;
@@ -320,6 +398,9 @@ _CSS = """
   @media (max-width: 700px) {
     .sg-journey { grid-template-columns: 1fr; gap: 12px; }
     .sg-brand-sub { display: none; }
+    .st-key-tour-dock, .st-key-tour-invite { padding: 1.15rem 1.2rem 1rem; }
+    .sg-tour-title { font-size: 1.15rem; }
+    .sg-tour-dots i { width: 14px; }
     div[class*="st-key-panel-"] { padding: 1.25rem; }
     .st-key-topnav { position: static; }
     .st-key-topnav [data-testid="stHorizontalBlock"] { flex-wrap: nowrap !important; gap: .25rem !important; }
@@ -590,10 +671,12 @@ def fmt_date(d) -> str:
 # Navigation
 # ---------------------------------------------------------------------------
 def render_top_nav(pages: dict) -> None:
+    from views import tour
+
     with st.container(key="topnav"):
         st.markdown("<div class='sg-brand'>ScholarGrid <span class='sg-brand-sub'>Research, with direction.</span></div>",
                     unsafe_allow_html=True)
-        cols = st.columns([1.2, 1.2, 1.2, .8], gap="small")
+        cols = st.columns([1.2, 1.2, 1.2, .8, .8], gap="small")
         for col, key in zip(cols[:3], ["home", "explore", "library"]):
             if key in pages:
                 col.page_link(pages[key])
@@ -602,6 +685,8 @@ def render_top_nav(pages: dict) -> None:
                 if key in pages:
                     st.page_link(pages[key])
             st.caption("Start with Find papers. Use these tools when you want deeper context.")
+        with cols[4]:
+            tour.header_control()
 
 
 def goto(key: str) -> None:

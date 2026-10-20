@@ -78,7 +78,7 @@ def _landing(bundle) -> None:
                 "<div><b>02 - Understand the context</b><p>Read abstracts and follow related papers.</p></div>"
                 "<div><b>03 - Leave with a reading list</b><p>Save useful papers and export your references.</p></div>"
                 "</div>", unsafe_allow_html=True)
-    tour.render()
+    tour.render_invite()
     with ui.panel("start-browsing"):
         ui.panel_header("Still choosing a topic?")
         st.write("Open the connected research map to see how areas relate, then follow a paper that interests you.")
