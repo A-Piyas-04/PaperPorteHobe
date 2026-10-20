@@ -1,0 +1,23 @@
+# ScholarGrid - the fields this instance actually serves (RAG, federated
+# learning, technical debt). Extraction resumes across days on free quota,
+# most-cited papers first, so useful gap cards appear from the first run.
+#
+#   python -m pipeline.run_pipeline --config configs/domain_mine.yaml --from-stage fulltext
+#
+# Scope: cs.CL 5285 + cs.LG 6380 + cs.SE 5270 + cs.DC 3904 = 20839 papers.
+# At ~1000 papers/day (250 req/day x extract pack_size 4) that is ~21 days.
+extends: production.yaml
+
+scope:
+  name: mine
+  categories: [cs.CL, cs.LG, cs.SE, cs.DC]
+  max_papers: null                 # no finish line: most_cited order means the tail is the cheap part
+  priority: most_cited
+
+fulltext:
+  max_papers_per_run: 1000         # ~50 min at the polite 3-second arXiv rate; matches daily extract throughput
+
+llm:
+  provider: live
+  budget:
+    offline_max_requests: 200      # leave headroom under rpd 250 for llm.budget.online_daily_requests
