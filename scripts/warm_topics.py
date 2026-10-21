@@ -77,6 +77,10 @@ def main() -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--config", default="configs/config.yaml")
     ap.add_argument("--limit", type=int, default=0, help="only the N most-cited matched papers")
+    ap.add_argument("--all", action="store_true",
+                    help="the whole corpus, most-cited first, not just saved topics")
+    ap.add_argument("--categories", default="",
+                    help="with --all: comma-separated primary categories (default: every category)")
     ap.add_argument("--no-fetch", action="store_true", help="skip arXiv fetching; extract what is stored")
     ap.add_argument("--keep-caches", action="store_true", help="do not clear saved topic gap caches")
     args = ap.parse_args()
@@ -89,21 +93,32 @@ def main() -> int:
     bundle_dir = resolve_bundle_dir(cfg)
     print(f"Serving bundle: {bundle_dir}")
 
-    ids = workspace_ids(cfg)
-    if not ids:
-        print("No saved topics found in " + cfg.workspace_dir + ". Open a topic in the app first.")
-        return 1
-
-    print("Looking for your topic papers:")
-    df = source_frame(cfg, bundle_dir, ids)
-    sub = df[df["arxiv_id"].isin(ids)].copy()
+    if args.all:
+        df = pd.read_parquet(os.path.join(bundle_dir, "papers.parquet"))
+        df["arxiv_id"] = df["arxiv_id"].astype(str)
+        sub = df
+        if args.categories:
+            want = {c.strip() for c in args.categories.split(",") if c.strip()}
+            sub = sub[sub["primary_category"].astype(str).isin(want)]
+            print(f"Whole corpus, categories {sorted(want)}: {len(sub)} of {len(df)} papers.")
+        else:
+            print(f"Whole corpus: {len(sub)} papers.")
+    else:
+        ids = workspace_ids(cfg)
+        if not ids:
+            print("No saved topics found in " + cfg.workspace_dir + ". Open a topic in the app first.")
+            return 1
+        print("Looking for your topic papers:")
+        df = source_frame(cfg, bundle_dir, ids)
+        sub = df[df["arxiv_id"].isin(ids)].copy()
     if "cited_by_count" in sub.columns:
         sub = sub.sort_values("cited_by_count", ascending=False, kind="stable")
     if args.limit:
         sub = sub.head(args.limit)
-    print(f"Topic papers: {len(ids)} saved, {len(sub)} of them in the corpus and processable.")
+    if not args.all:
+        print(f"Topic papers: {len(ids)} saved, {len(sub)} of them in the corpus and processable.")
     if not len(sub):
-        print("None of your topic papers are in the corpus; they all came from live search.")
+        print("Nothing to process.")
         return 1
 
     if not args.no_fetch:

@@ -304,7 +304,7 @@ llm:
   provider: live
   providers:
     gemini:     {kind: gemini, api_key_env: GEMINI_API_KEY, quota_tz: America/Los_Angeles}
-    groq:       {kind: openai_compat, enabled: false, base_url: "https://api.groq.com/openai/v1",
+    groq:       {kind: openai_compat, enabled: true, base_url: "https://api.groq.com/openai/v1",
                  api_key_env: GROQ_API_KEY, json_mode: object, quota_tz: UTC}
     openrouter: {kind: openai_compat, enabled: false, base_url: "https://openrouter.ai/api/v1",
                  api_key_env: OPENROUTER_API_KEY, json_mode: object, quota_tz: UTC}
@@ -315,7 +315,7 @@ llm:
     "gemini:gemini-3.6-flash":      {rpm: 5, rpd: 100}
     "groq:openai/gpt-oss-120b":     {rpm: 30, rpd: 1000, tpm: 8000}
   tasks:
-    extract:        {route: ["gemini:gemini-3.5-flash-lite", "gemini:gemini-3.6-flash", "gemini:gemini-3.8-flash"], thinking: minimal, max_output_tokens: 16384, pack_size: 6, expected_output_tokens: 1200}
+    extract:        {route: ["gemini:gemini-3.5-flash-lite", "gemini:gemini-3.6-flash", "gemini:gemini-3.8-flash", "groq:openai/gpt-oss-120b"], thinking: minimal, max_output_tokens: 16384, pack_size: 6, expected_output_tokens: 1200}
     label:          {route: ["gemini:gemini-3.5-flash-lite"], thinking: minimal, max_output_tokens: 12288, pack_size: 6, expected_output_tokens: 400}
     reason:         {route: ["gemini:gemini-3.5-flash-lite"], thinking: minimal, max_output_tokens: 4096, pack_size: 6, expected_output_tokens: 200}
     judge:          {route: ["gemini:gemini-3.8-flash", "gemini:gemini-3.5-flash-lite"], thinking: low, max_output_tokens: 12288, pack_size: 5, expected_output_tokens: 400}

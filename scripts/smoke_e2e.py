@@ -132,17 +132,23 @@ def main() -> int:
                 traceback.print_exc()
                 failures += 1
                 continue
-            steps = getattr(doc.plan, "steps", None) or getattr(doc.plan, "weeks", None) or []
-            print(f"  mode={doc.generated_by.get('mode')} steps={len(steps)} "
-                  f"refs={len(doc.references)} warnings={len(doc.warnings)}")
+            pl = doc.plan
+            parts = {"milestones": pl.milestones, "experiments": pl.experiments,
+                     "sub_questions": pl.sub_questions, "baselines": pl.baselines,
+                     "datasets": pl.datasets, "metrics": pl.metrics, "risks": pl.risks}
+            print(f"  mode={doc.generated_by.get('mode')} refs={len(doc.references)} "
+                  f"warnings={len(doc.warnings)}")
+            print(f"  question: {pl.research_question[:100]!r}")
+            for k, v in parts.items():
+                print(f"    {k:14s} {len(v)}")
+            empty = [k for k, v in parts.items() if not v]
             for w in doc.warnings[:3]:
                 print(f"    warn: {w}")
-            if not steps:
-                print(f"{BAD} plan has no steps.")
+            if not pl.research_question or not pl.milestones:
+                print(f"{BAD} plan is unusable (no research question or no milestones).")
                 failures += 1
             else:
-                print(f"{OK} plan generated")
-
+                print(f"{OK} plan generated" + (f" (empty: {', '.join(empty)})" if empty else ", all sections populated"))
     print("\n" + ("ALL GREEN" if not failures else f"{failures} FAILURE(S)"))
     return 1 if failures else 0
 
