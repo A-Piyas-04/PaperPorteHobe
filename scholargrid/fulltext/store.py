@@ -20,6 +20,20 @@ from .model import Cue, Section
 STATUS_COLUMNS = ["arxiv_id", "status", "source", "fetched_at", "http_status", "n_sections", "n_chars", "error"]
 
 
+def _safe(value):
+    """Make parsed text safe to write to parquet.
+
+    HTML and PDF extraction can leave unpaired UTF-16 surrogates in a Python str (a mangled
+    mathematical symbol, say). pyarrow refuses to encode those, and because it fails inside
+    ``flush`` it kills the whole run and loses the buffered batch. Round-tripping through
+    UTF-16 with ``surrogatepass`` rebuilds real characters from valid pairs and drops the
+    unpaired remainder, so one bad paper can no longer stop a long fetch.
+    """
+    if not isinstance(value, str) or not any(0xD800 <= ord(ch) <= 0xDFFF for ch in value):
+        return value
+    return value.encode("utf-16", "surrogatepass").decode("utf-16", "ignore")
+
+
 class FulltextStore:
     def __init__(self, cfg: Config):
         self.dir = ensure_dir(cfg.fulltext_dir)
@@ -39,13 +53,14 @@ class FulltextStore:
         now = time.time()
         self._status_rows.append({"arxiv_id": arxiv_id, "status": status, "source": source, "fetched_at": now,
                                   "http_status": http_status, "n_sections": len(sections),
-                                  "n_chars": sum(len(s.text) for s in sections), "error": error})
+                                  "n_chars": sum(len(s.text) for s in sections), "error": _safe(error)})
         for s in sections:
-            self._sec_rows.append({**s.to_row(arxiv_id, source), "fetched_at": now})
+            row = {k: _safe(v) for k, v in s.to_row(arxiv_id, source).items()}
+            self._sec_rows.append({**row, "fetched_at": now})
         for c in cues:
             self._cue_rows.append({"arxiv_id": arxiv_id, "section_idx": c.section_idx, "kind": c.kind,
-                                   "sentence": c.sentence, "cue": c.cue, "char_start": c.char_start,
-                                   "fetched_at": now})
+                                   "sentence": _safe(c.sentence), "cue": _safe(c.cue),
+                                   "char_start": c.char_start, "fetched_at": now})
 
     def _stamp(self) -> str:
         stamp = max(int(time.time() * 1000), self._last_stamp + 1)   # unique even within one millisecond
